@@ -6,7 +6,7 @@
 #include "utils.h"
 #include <string.h>
 
-#define CAMERA_SPEED 3.0f
+#define CAMERA_SPEED 5.0f
 #define MOUSE_SENSITIVITY 0.1f
 
 // Kamera, die eine Flugbewegung implementiert. Dient als Beispiel für ein Kamerasystem und kann ausgebaut/verändert/erweitert werden

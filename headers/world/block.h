@@ -24,6 +24,14 @@ typedef struct {
 
 } Block;
 
+// Atlas-Werte
+#define ATLAS_WIDTH 600.0f
+#define ATLAS_HEIGHT 600.0f
+#define SUBTEXTURE_WIDTH 37.5f
+#define SUBTEXTURE_HEIGHT 37.5f
+#define RELATIVE_SUBTEXTURE_WIDTH SUBTEXTURE_WIDTH / ATLAS_WIDTH
+#define RELATIVE_SUBTEXTURE_HEIGHT SUBTEXTURE_HEIGHT / ATLAS_HEIGHT
+
 // Globale Blöcke
 extern Block air;
 extern Block dirt;

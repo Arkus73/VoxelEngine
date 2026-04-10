@@ -16,10 +16,17 @@ void destroyDynamicArray(DynamicArray* this) {
 
 DynamicArray* createDynamicArray(size_t elementSize, int startCapacity, bool registered) {
     DynamicArray* this = malloc(sizeof(DynamicArray));
+    if(this == NULL) {
+        throwException("Couldn't allocate memory");
+    }
     this->capacity = startCapacity;
     this->len = 0;
     this->elementSize = elementSize;
-    this->ptr = malloc(elementSize);
+    this->ptr = malloc(elementSize * this->capacity);
+    if(this->ptr == NULL) {
+        free(this);
+        throwException("Couldn't allocate memory");
+    }
     if(registered) {
         addToDynamicArray(dynamicArrays, this);
     }
@@ -89,8 +96,4 @@ void* getFromDynamicArray(DynamicArray* this, int index) {
         return NULL;
     }
     return ADDRESS_AT_INDEX(this, index);
-}
-
-void toArray(DynamicArray* this, void* dest) {
-    memcpy(dest, this->ptr, this->elementSize * this->len);
 }

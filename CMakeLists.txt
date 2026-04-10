@@ -25,6 +25,7 @@ add_executable(Test
     src/world/block.c
     src/player/camera.c
     src/render/chunk.c
+    src/render/mesh.c
     src/render/renderer.c
     src/utils/shader.c
     src/utils/stb_image.c
