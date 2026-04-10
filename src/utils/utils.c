@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <stdbool.h>
 #include "utils.h"
 #include "stb_image.h"
 
@@ -35,6 +34,7 @@ void default_framebuffer_size_callback(GLFWwindow* window, int width, int height
 
 void throwException(char* msg) {
     printf("%s\n", msg);
+    glfwTerminate();
     exit(EXIT_FAILURE);
 }
 

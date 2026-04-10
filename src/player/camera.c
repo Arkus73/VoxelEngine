@@ -33,7 +33,7 @@ Camera* createCamera(vec3 pos, float yaw, float pitch) {
         throwException("Memory couldn't be allocated");
     }
 
-    memcpy(this->pos, pos, sizeof(vec3));
+    glm_vec3_copy(pos, this->pos);
     this->yaw = yaw;
     this->pitch = pitch;
 

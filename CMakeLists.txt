@@ -22,16 +22,22 @@ add_subdirectory(external/cglm)
 # Executable
 add_executable(Test
     src/main.c
-    src/utils.c
-    src/shader.c
-    src/stb_image.c
-    src/camera.c
+    src/world/block.c
+    src/player/camera.c
+    src/render/chunk.c
+    src/render/renderer.c
+    src/utils/shader.c
+    src/utils/stb_image.c
+    src/utils/utils.c
 )
 
 # Includes
 target_include_directories(Test
     PUBLIC external/glad/include/
-    PUBLIC headers/
+    PUBLIC headers/player
+    PUBLIC headers/render
+    PUBLIC headers/utils
+    PUBLIC headers/world
 )
 
 # Linken
