@@ -29,6 +29,7 @@ add_executable(Test
     src/utils/shader.c
     src/utils/stb_image.c
     src/utils/utils.c
+    src/utils/dynamicArray.c
 )
 
 # Includes
