@@ -28,7 +28,7 @@ DynamicArray* createDynamicArray(size_t elementSize, int startCapacity, bool reg
         throwException("Couldn't allocate memory");
     }
     if(registered) {
-        addToDynamicArray(dynamicArrays, this);
+        addToDynamicArray(dynamicArrays, &this);
     }
     return this;
 }

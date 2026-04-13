@@ -9,7 +9,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#define BLOCK_AT(x, y, z) (this->blocks[x * CHUNK_HEIGHT * CHUNK_DEPTH + y * CHUNK_DEPTH + z])
+#define BLOCK_AT(x, y, z) (this->blocks[(x) * CHUNK_HEIGHT * CHUNK_DEPTH + (y) * CHUNK_DEPTH + (z)])    // x, y und z in Klammern, damit Rechenreihenfolge auch bspw. bei x = x + 1 eingehalten wird
 
 Chunk* createChunk(Block* blocks, float x, float z) {
 
@@ -22,13 +22,13 @@ Chunk* createChunk(Block* blocks, float x, float z) {
     this->x = x;
     this->z = z;
 
-    this->blocks = malloc(sizeof(Block) * CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH);
+    this->blocks = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(Block));
     if(this->blocks == NULL) {
         free(this);
         throwException("Memory couldn't be allocated for blocks");
     }
 
-    memcpy(this->blocks, blocks, sizeof(Block) * CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH);
+    memcpy(this->blocks, blocks, CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(Block));
 
     this->mesh = initMesh();
     updateChunkMesh(this);
@@ -37,9 +37,7 @@ Chunk* createChunk(Block* blocks, float x, float z) {
 }
 
 void destroyChunk(Chunk* this) {
-    if(this->mesh != NULL) {
-        destroyMesh(this->mesh);
-    }
+    destroyMesh(this->mesh);
     free(this->blocks);
     free(this);
 }
@@ -50,6 +48,8 @@ void addVertexToChunkMesh(Face face, DynamicArray* vertices, float x, float y, f
 
 
 void updateChunkMesh(Chunk* this) {
+
+    INIT_MODULE_DYNAMIC_ARRAY
 
     DynamicArray* vertices = createDynamicArray(sizeof(float), 8e3, true);
     DynamicArray* indices = createDynamicArray(sizeof(unsigned int), 2e3, true);
@@ -80,9 +80,10 @@ void updateChunkMesh(Chunk* this) {
                 if(x == CHUNK_WIDTH - 1 || BLOCK_AT(x + 1, y, z).id == AIR) {
                     addFaceToChunkMesh(BLOCK_AT(x, y, z), RIGHT, vertices, indices, x, y, z);
                 }
-                if(x == CHUNK_WIDTH - 1 || BLOCK_AT(x + 1, y, z).id == AIR) {
+                if(x == 0 || BLOCK_AT(x - 1, y, z).id == AIR) {
                     addFaceToChunkMesh(BLOCK_AT(x, y, z), LEFT, vertices, indices, x, y, z);
                 }
+
 
             }
         }
@@ -92,8 +93,7 @@ void updateChunkMesh(Chunk* this) {
 
     generateMesh(this->mesh, (float*) vertices->ptr, vertices->len, (unsigned int*) indices->ptr, indices->len);
 
-    destroyDynamicArray(indices);
-    destroyDynamicArray(vertices);
+    DEINIT_MODULE_DYNAMIC_ARRAY
 }
 
 void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicArray* indices, int x, int y, int z) {

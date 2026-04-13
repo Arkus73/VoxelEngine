@@ -48,21 +48,23 @@ int main() {
     unsigned int blockAtlas = createTexture("../assets/blockAtlas.png", GL_NEAREST);
     setInt(shader, "blockAtlas", 0);
 
-    cam = createCamera((vec3) {2.0f, 0.0f, 12.0f}, -90.0f, 0.0f);
+    cam = createCamera((vec3) {2.0f, 0.0f, 25.0f}, -90.0f, 0.0f);
 
-    Block blocks[CHUNK_WIDTH][CHUNK_HEIGHT][CHUNK_DEPTH];
+    Block* blocks = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(Block));
     for(int x = 0; x < CHUNK_WIDTH; x++) {
         for(int y = 0; y < CHUNK_HEIGHT; y++) {
             for(int z = 0; z < CHUNK_DEPTH; z++) {
-                blocks[x][y][z] = dirt;
+                blocks[x * CHUNK_HEIGHT * CHUNK_DEPTH + y * CHUNK_DEPTH + z] = dirt;
             }
         }
     }
 
-    Chunk* chunk = createChunk((Block*)blocks, 0, 0);
+    Chunk* chunk = createChunk(blocks, 0, 0);
+    free(blocks);
 
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
+
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -94,6 +96,7 @@ int main() {
 
     }
 
+    destroyChunk(chunk);
     glfwTerminate();
     return 0;
 }

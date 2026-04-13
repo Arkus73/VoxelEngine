@@ -37,6 +37,9 @@ Mesh* initMesh() {
 }
 
 void destroyMesh(Mesh* this) {
+    glDeleteVertexArrays(1, &this->VAO);
+    glDeleteBuffers(1, &this->VBO);
+    glDeleteBuffers(1, &this->EBO);
     free(this);
 }
 

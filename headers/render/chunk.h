@@ -5,9 +5,9 @@
 #include "block.h"
 #include "shader.h"
 
-#define CHUNK_WIDTH 4
-#define CHUNK_HEIGHT 16
-#define CHUNK_DEPTH 4
+#define CHUNK_WIDTH 16
+#define CHUNK_HEIGHT 256
+#define CHUNK_DEPTH 16
 
 typedef enum {
     FRONT,
