@@ -24,7 +24,6 @@ DynamicArray* createDynamicArray(size_t elementSize, int startCapacity, bool reg
     this->elementSize = elementSize;
     this->ptr = malloc(elementSize * this->capacity);
     if(this->ptr == NULL) {
-        free(this);
         throwException("Couldn't allocate memory");
     }
     if(registered) {

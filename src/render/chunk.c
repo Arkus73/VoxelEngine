@@ -12,7 +12,7 @@
 
 #define BLOCK_AT(x, y, z) (this->blocks[(x) * CHUNK_HEIGHT * CHUNK_DEPTH + (y) * CHUNK_DEPTH + (z)])    // x, y und z in Klammern, damit Rechenreihenfolge auch bspw. bei x = x + 1 eingehalten wird
 
-Chunk* createChunk(uint8_t* blocks, float x, float z) {
+Chunk* createChunk(uint8_t* blocks, int x, int z) {
 
     Chunk* this = malloc(sizeof(Chunk));
 
@@ -25,7 +25,6 @@ Chunk* createChunk(uint8_t* blocks, float x, float z) {
 
     this->blocks = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t));
     if(this->blocks == NULL) {
-        free(this);
         throwException("Memory couldn't be allocated for blocks");
     }
 
@@ -62,6 +61,10 @@ void updateChunkMesh(Chunk* this) {
 
                 if(BLOCK_AT(x, y, z) == BLOCK_AIR) {
                     continue;
+                }
+
+                if(BLOCK_AT(x, y, z) < 0 || BLOCK_AT(x, y, z) >= 4) {
+                    printf("%d", BLOCK_AT(x, y, z));
                 }
 
                 Block currentBlock = TO_VALUE(Block) getFromDynamicArray(blockRegistry, BLOCK_AT(x, y, z));
@@ -266,7 +269,7 @@ void addVertexToChunkMesh(Face face, DynamicArray* vertices, float x, float y, f
 void renderChunk(Chunk* this, Shader shader) {
     mat4 model;
     glm_mat4_identity(model);
-    glm_translate(model, (vec3) {this->x, -CHUNK_HEIGHT / 2, this->z});
+    glm_translate(model, (vec3) {this->x * CHUNK_WIDTH, -CHUNK_HEIGHT / 2, this->z * CHUNK_DEPTH});
     setMatrix(shader, "model", model);
     renderMesh(this->mesh);
 }

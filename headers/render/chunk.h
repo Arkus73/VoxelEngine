@@ -22,10 +22,10 @@ typedef enum {
 typedef struct {
     Mesh* mesh; // Das Mesh des Chunks
     uint8_t* blocks;  // Array mit allen Blöcken des Chunks, gespeichert als Byte-große Block-IDs
-    float x, z;  // Koordinaten des Chunks
+    int x, z;  // Koordinaten des Chunks
 } Chunk;
 
-Chunk* createChunk(uint8_t* blocks, float x, float z);
+Chunk* createChunk(uint8_t* blocks, int x, int z);
 void destroyChunk(Chunk* this);
 void updateChunkMesh(Chunk* this);  // Updated das Chunk-Mesh aufgrund des block-Arrays
 void renderChunk(Chunk* this, Shader shader);

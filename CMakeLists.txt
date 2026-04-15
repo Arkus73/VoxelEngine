@@ -21,15 +21,23 @@ add_subdirectory(external/cglm)
 
 # Executable
 add_executable(Test
+
     src/main.c
+
     src/world/block.c
+    src/world/chunkFileInterfacing.c
+    src/world/worldGenerator.c
+
     src/player/camera.c
+
     src/render/chunk.c
     src/render/mesh.c
+
     src/utils/shader.c
     src/utils/stb_image.c
     src/utils/utils.c
     src/utils/dynamicArray.c
+    
 )
 
 # Includes
