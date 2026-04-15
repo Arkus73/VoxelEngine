@@ -2,12 +2,13 @@
 #define CHUNK_H
 
 #include "mesh.h"
-#include "block.h"
 #include "shader.h"
 
-#define CHUNK_WIDTH 16
-#define CHUNK_HEIGHT 256
-#define CHUNK_DEPTH 16
+#include <stdint.h>
+
+#define CHUNK_WIDTH 8
+#define CHUNK_HEIGHT 16
+#define CHUNK_DEPTH 8
 
 typedef enum {
     FRONT,
@@ -20,11 +21,11 @@ typedef enum {
 
 typedef struct {
     Mesh* mesh; // Das Mesh des Chunks
-    Block* blocks;  // Array mit allen Blöcken des Chunks
-    float x, z;  // Koordinaten des Chunks
+    uint8_t* blocks;  // Array mit allen Blöcken des Chunks, gespeichert als Byte-große Block-IDs
+    int x, z;  // Koordinaten des Chunks
 } Chunk;
 
-Chunk* createChunk(Block* blocks, float x, float z);
+Chunk* createChunk(uint8_t* blocks, int x, int z);
 void destroyChunk(Chunk* this);
 void updateChunkMesh(Chunk* this);  // Updated das Chunk-Mesh aufgrund des block-Arrays
 void renderChunk(Chunk* this, Shader shader);

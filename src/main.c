@@ -1,17 +1,25 @@
+// technische OpenGL includes
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <cglm/cglm.h>
 
-#include "camera.h"
+// utils includes
 #include "shader.h"
 #include "stb_image.h"
 #include "utils.h"
 #include "dynamicArray.h"
 
+// world und render includes
 #include "chunk.h"
 #include "block.h"
+#include "chunkFileInterfacing.h"
+#include "worldGenerator.h"
 
-#include <stdint.h>
+// player includes
+#include "camera.h"
+
+// C includes
+
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -48,26 +56,25 @@ int main() {
     unsigned int blockAtlas = createTexture("../assets/blockAtlas.png", GL_NEAREST);
     setInt(shader, "blockAtlas", 0);
 
-    cam = createCamera((vec3) {2.0f, 0.0f, 25.0f}, -90.0f, 0.0f);
+    cam = createCamera((vec3) {2.0f, 0.0f, 30.0f}, -90.0f, 0.0f);
+    
+    initBlocks();
+    generateWorld();
 
-    Block* blocks = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(Block));
-    for(int x = 0; x < CHUNK_WIDTH; x++) {
-        for(int y = 0; y < CHUNK_HEIGHT; y++) {
-            for(int z = 0; z < CHUNK_DEPTH; z++) {
-                blocks[x * CHUNK_HEIGHT * CHUNK_DEPTH + y * CHUNK_DEPTH + z] = dirt;
-            }
+    Chunk* chunks[3][3];
+    for(int x = 0; x < 3; x++) {
+        for(int z = 0; z < 3; z++) {
+            chunks[x][z] = createChunk(loadChunkData(x, z), x, z);
         }
     }
 
-    Chunk* chunk = createChunk(blocks, 0, 0);
-    free(blocks);
+    glEnable(GL_CULL_FACE); // Face-Culling wird aktiviert, wodurch Faces, die vom Spieler wegzeigen nicht gerendert werden, was zu deutlich besserer Perfomance führt
 
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);    // Depth-Test wird angeschaltet, um zu gewährleisten, dass die 3D-Drawing-Order eingehalten wird
 
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);  // Wireframe-Modus falls nötig
 
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);    // Cursor wird im Fenster gecatched
 
     float lastFrame = glfwGetTime();
 
@@ -76,7 +83,7 @@ int main() {
         glClearColor(0.55f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        float currentFrame = glfwGetTime();
+        float currentFrame = glfwGetTime(); // delta wird berechnet
         float delta = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
@@ -89,14 +96,24 @@ int main() {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, blockAtlas);
 
-        renderChunk(chunk, shader);
+        for(int x = 0; x < 3; x++) {
+            for(int z = 0; z < 3; z++) {
+                renderChunk(chunks[x][z], shader);
+            }
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
 
     }
 
-    destroyChunk(chunk);
+    for(int x = 0; x < 3; x++) {
+        for(int z = 0; z < 3; z++) {
+            destroyChunk(chunks[x][z]);
+        }
+    }
+    destroyBlocks();
+    DEINIT_MODULE_DYNAMIC_ARRAY;
     glfwTerminate();
     return 0;
 }

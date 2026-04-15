@@ -1,18 +1,19 @@
 #ifndef BLOCK_H
 #define BLOCK_H
 
+#include "dynamicArray.h"
+
 typedef float texCoord[2];
 
 // Block-IDs, die zur eindeutigen Identifizierung eines Blocks nötig sind
 typedef enum {
     AIR,
     GRASS,
-    DIRT
+    DIRT,
+    STONE
 } BlockId;
 
 typedef struct {
-    
-    BlockId id;
 
     // texCoords, die angeben welche Subtextur des Texture Atlas für welche Seite genutzt werden soll
     texCoord frontTexture;
@@ -33,8 +34,14 @@ typedef struct {
 #define RELATIVE_SUBTEXTURE_HEIGHT SUBTEXTURE_HEIGHT / ATLAS_HEIGHT
 
 // Globale Blöcke
-extern Block air;
-extern Block dirt;
-extern Block grass;
+extern DynamicArray* blockRegistry;
+
+#define BLOCK_AIR 0
+#define BLOCK_DIRT 1
+#define BLOCK_GRASS 2
+#define BLOCK_STONE 3
+
+void initBlocks();
+void destroyBlocks();
 
 #endif

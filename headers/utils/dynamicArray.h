@@ -14,8 +14,8 @@ typedef struct {
 extern DynamicArray* dynamicArrays;
 
 #define TO_VALUE(type) *(type*)
-#define INIT_MODULE_DYNAMIC_ARRAY {dynamicArrays = createDynamicArray(sizeof(DynamicArray*), 5, false);}
-#define DEINIT_MODULE_DYNAMIC_ARRAY for(int i = 0; i < dynamicArrays->len; i++) {destroyDynamicArray(TO_VALUE(DynamicArray*)getFromDynamicArray(dynamicArrays, i));} destroyDynamicArray(dynamicArrays);
+#define INIT_MODULE_DYNAMIC_ARRAY dynamicArrays = createDynamicArray(sizeof(DynamicArray*), 5, false)
+#define DEINIT_MODULE_DYNAMIC_ARRAY for(int i = 0; i < dynamicArrays->len; i++) {destroyDynamicArray(TO_VALUE(DynamicArray*)getFromDynamicArray(dynamicArrays, i));} destroyDynamicArray(dynamicArrays)
 
 void destroyDynamicArray(DynamicArray* this);
 DynamicArray* createDynamicArray(size_t elementSize, int startCapacity, bool registered);

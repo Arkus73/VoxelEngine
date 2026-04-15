@@ -8,25 +8,25 @@
 #include <stdlib.h>
 
 char* loadShaderSource(const char* dir) {
-    FILE* file = fopen(dir, "rb");
+    FILE* file = fopen(dir, "rb");  // Datei wird geöffnet
     if (file == NULL) {
         throwException("ERROR: Could not open file");
     }
 
-    fseek(file, 0, SEEK_END);
+    fseek(file, 0, SEEK_END);   // Größe der Datei wird ermittelt
     long size = ftell(file);
     rewind(file);
 
-    char* buffer = (char*)malloc(size + 1);
+    char* buffer = (char*)malloc(size + 1); // Buffer wird allokiert
     if (buffer == NULL) {
         fclose(file);
         throwException("ERROR: Memory allocation failed");
     }
 
-    fread(buffer, 1, size, file);
+    fread(buffer, 1, size, file);   // Buffer wird aus der Datei beschrieben
     buffer[size] = '\0';
 
-    fclose(file);
+    fclose(file);   // Datei wird geschlossen und der Buffer returned
     return buffer;
 }
 
