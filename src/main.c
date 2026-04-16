@@ -10,9 +10,8 @@
 #include "dynamicArray.h"
 
 // world und render includes
-#include "chunk.h"
+#include "chunkRenderer.h"
 #include "block.h"
-#include "chunkFileInterfacing.h"
 #include "worldGenerator.h"
 
 // player includes
@@ -32,8 +31,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window, float delta);
 
 int main() {
-    
-    INIT_MODULE_DYNAMIC_ARRAY;
 
     glfwInit();
     GLFWwindow* window = InitAndCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Minecraft Clone");
@@ -60,19 +57,14 @@ int main() {
     
     initBlocks();
     generateWorld();
-
-    Chunk* chunks[3][3];
-    for(int x = 0; x < 3; x++) {
-        for(int z = 0; z < 3; z++) {
-            chunks[x][z] = createChunk(loadChunkData(x, z), x, z);
-        }
-    }
+    initChunkRenderer();
+    initChunkMeshes();
 
     glEnable(GL_CULL_FACE); // Face-Culling wird aktiviert, wodurch Faces, die vom Spieler wegzeigen nicht gerendert werden, was zu deutlich besserer Perfomance führt
 
     glEnable(GL_DEPTH_TEST);    // Depth-Test wird angeschaltet, um zu gewährleisten, dass die 3D-Drawing-Order eingehalten wird
 
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);  // Wireframe-Modus falls nötig
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);  // Wireframe-Modus falls nötig
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);    // Cursor wird im Fenster gecatched
 
@@ -96,24 +88,16 @@ int main() {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, blockAtlas);
 
-        for(int x = 0; x < 3; x++) {
-            for(int z = 0; z < 3; z++) {
-                renderChunk(chunks[x][z], shader);
-            }
-        }
+        renderChunks(shader);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
 
     }
 
-    for(int x = 0; x < 3; x++) {
-        for(int z = 0; z < 3; z++) {
-            destroyChunk(chunks[x][z]);
-        }
-    }
+    destroyChunks();
     destroyBlocks();
-    DEINIT_MODULE_DYNAMIC_ARRAY;
+
     glfwTerminate();
     return 0;
 }

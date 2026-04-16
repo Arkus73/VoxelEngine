@@ -4,13 +4,14 @@
 #include "utils.h"
 #include "shader.h"
 #include "dynamicArray.h"
+#include "chunkRenderer.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
 
-#define BLOCK_AT(x, y, z) (this->blocks[(x) * CHUNK_HEIGHT * CHUNK_DEPTH + (y) * CHUNK_DEPTH + (z)])    // x, y und z in Klammern, damit Rechenreihenfolge auch bspw. bei x = x + 1 eingehalten wird
+#define BLOCK_AT(x, y, z) blocks[(x) * CHUNK_HEIGHT * CHUNK_DEPTH + (y) * CHUNK_DEPTH + (z)]    // x, y und z in Klammern, damit Rechenreihenfolge auch bspw. bei x = x + 1 eingehalten wird
 
 Chunk* createChunk(uint8_t* blocks, int x, int z) {
 
@@ -31,7 +32,6 @@ Chunk* createChunk(uint8_t* blocks, int x, int z) {
     memcpy(this->blocks, blocks, CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t));
 
     this->mesh = initMesh();
-    updateChunkMesh(this);
 
     return this;
 }
@@ -59,33 +59,69 @@ void updateChunkMesh(Chunk* this) {
         for(int y = 0; y < CHUNK_HEIGHT; y++) {
             for(int z = 0; z < CHUNK_DEPTH; z++) {
 
-                if(BLOCK_AT(x, y, z) == BLOCK_AIR) {
+                if(this->BLOCK_AT(x, y, z) == BLOCK_AIR) {
                     continue;
                 }
 
-                Block currentBlock = TO_VALUE(Block) getFromDynamicArray(blockRegistry, BLOCK_AT(x, y, z));
+                Block currentBlock = TO_VALUE(Block) getFromDynamicArray(blockRegistry, this->BLOCK_AT(x, y, z));
 
                 // (x, y, z) ist die Position des linken, unteren, hinteren Vertex
-                // Falls Face sichtbar ist (nicht an Luft oder einen benachbarten Chunk grenzt), wird es dem Chunk-Mesh hinzugefügt
-                if(z == CHUNK_DEPTH - 1 || BLOCK_AT(x, y, z + 1) == BLOCK_AIR) {
+                // Falls Face sichtbar ist (an Luft grenzt), wird es dem Chunk-Mesh hinzugefügt
+
+                if(z == CHUNK_DEPTH - 1) {   // Handelt es sich um einen Block am vorderen Rand?
+                    if((this->z + 1) >= RENDER_DISTANCE) {   // Befindet er sich in einem Randchunk?
+                        addFaceToChunkMesh(currentBlock, FRONT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
+                    } else {
+                        if(loadedChunks[this->x * RENDER_DISTANCE + this->z + 1]->BLOCK_AT(x, y, 0) == BLOCK_AIR) {   // Ist anliegende Block im nächsten Chunk Luft?
+                            addFaceToChunkMesh(currentBlock, FRONT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
+                        }
+                    }
+                } else if(this->BLOCK_AT(x, y, z + 1) == BLOCK_AIR) {   // Ist es kein Block am vorderen Rand, ist der Block vor ihm im momentanen Chunk Luft?
                     addFaceToChunkMesh(currentBlock, FRONT, vertices, indices, x, y, z);
                 }
-                if(z == 0 || BLOCK_AT(x, y, z - 1) == BLOCK_AIR) {
+
+                if(z == 0) {   // Handelt es sich um einen Block am hinteren Rand?
+                    if((this->z - 1) < 0) {   // Befindet er sich in einem Randchunk?
+                        addFaceToChunkMesh(currentBlock, BACK, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
+                    } else {
+                        if(loadedChunks[this->x * RENDER_DISTANCE + this->z - 1]->BLOCK_AT(x, y, CHUNK_WIDTH - 1) == BLOCK_AIR) {   // Ist anliegende Block im nächsten Chunk Luft?
+                            addFaceToChunkMesh(currentBlock, BACK, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
+                        }
+                    }
+                } else if(this->BLOCK_AT(x, y, z - 1) == BLOCK_AIR) {   // Ist es kein Block am hinteren Rand, ist der Block hinter ihm im momentanen Chunk Luft?
                     addFaceToChunkMesh(currentBlock, BACK, vertices, indices, x, y, z);
                 }
-                if(y == CHUNK_HEIGHT - 1 || BLOCK_AT(x, y + 1, z) == BLOCK_AIR) {
+
+                if(y == CHUNK_HEIGHT - 1 || this->BLOCK_AT(x, y + 1, z) == BLOCK_AIR) {
                     addFaceToChunkMesh(currentBlock, TOP, vertices, indices, x, y, z);
                 }
-                if(y == 0 || BLOCK_AT(x, y - 1, z) == BLOCK_AIR) {
+                if(y == 0 || this->BLOCK_AT(x, y - 1, z) == BLOCK_AIR) {
                     addFaceToChunkMesh(currentBlock, BOTTOM, vertices, indices, x, y, z);
                 }
-                if(x == CHUNK_WIDTH - 1 || BLOCK_AT(x + 1, y, z) == BLOCK_AIR) {
+
+                if(x == CHUNK_WIDTH - 1) {   // Handelt es sich um einen Block am rechten Rand?
+                    if((this->x + 1) >= RENDER_DISTANCE) {   // Befindet er sich in einem Randchunk?
+                        addFaceToChunkMesh(currentBlock, RIGHT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
+                    } else {
+                        if(loadedChunks[(this->x + 1) * RENDER_DISTANCE + this->z]->BLOCK_AT(0, y, z) == BLOCK_AIR) {   // Ist anliegende Block im nächsten Chunk Luft?
+                            addFaceToChunkMesh(currentBlock, RIGHT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
+                        }
+                    }
+                } else if(this->BLOCK_AT(x + 1, y, z) == BLOCK_AIR) {   // Ist es kein Block am rechten Rand, ist der Block rechts von ihm im momentanen Chunk Luft?
                     addFaceToChunkMesh(currentBlock, RIGHT, vertices, indices, x, y, z);
                 }
-                if(x == 0 || BLOCK_AT(x - 1, y, z) == BLOCK_AIR) {
+
+                if(x == 0) {   // Handelt es sich um einen Block am linken Rand?
+                    if((this->x - 1) < 0) {   // Befindet er sich in einem Randchunk?
+                        addFaceToChunkMesh(currentBlock, LEFT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
+                    } else {
+                        if(loadedChunks[(this->x - 1) * RENDER_DISTANCE + this->z]->BLOCK_AT(CHUNK_WIDTH - 1, y, z) == BLOCK_AIR) {   // Ist anliegende Block im nächsten Chunk Luft?
+                            addFaceToChunkMesh(currentBlock, LEFT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
+                        }
+                    }
+                } else if(this->BLOCK_AT(x - 1, y, z) == BLOCK_AIR) {   // Ist es kein Block am linken Rand, ist der Block links von ihm im momentanen Chunk Luft?
                     addFaceToChunkMesh(currentBlock, LEFT, vertices, indices, x, y, z);
                 }
-
 
             }
         }

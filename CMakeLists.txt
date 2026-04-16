@@ -32,6 +32,7 @@ add_executable(Test
 
     src/render/chunk.c
     src/render/mesh.c
+    src/render/chunkRenderer.c
 
     src/utils/shader.c
     src/utils/stb_image.c
