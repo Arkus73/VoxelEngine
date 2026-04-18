@@ -3,6 +3,7 @@
 #include "chunk.h"
 #include "block.h"
 #include "utils.h"
+#include "consts.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -27,8 +28,9 @@ void generateWorld() {
         }
     }
     
-    for(int x = 0; x < 3; x++) {
-        for(int z = 0; z < 3; z++) {
+    system("del /Q ..\\chunks\\*.bin"); // system() führt den Batch-Command aus, den man als Argument in den String schreibt
+    for(int x = -WORLD_WIDTH / 2; x < WORLD_WIDTH / 2 + 1; x++) {
+        for(int z = -WORLD_DEPTH / 2; z < WORLD_DEPTH / 2 + 1; z++) {
             saveChunk(blocks, x, z);
         }
     }

@@ -2,14 +2,14 @@
 #define CHUNK_RENDERER_H
 
 #include "chunk.h"
+#include "ringBuffer.h"
 
-#define RENDER_DISTANCE 3
-
-extern Chunk** loadedChunks;
+extern ChunkRingBuffer2D* loadedChunks;
 
 void initChunkRenderer();
 void initChunkMeshes();
 void renderChunks(Shader shader);
+void dynamicallyLoadAndUnloadChunks(vec3 lastPlayerPos, vec3 playerPos);
 void destroyChunks();
 
 #endif

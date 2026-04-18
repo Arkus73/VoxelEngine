@@ -76,6 +76,19 @@ void processCameraKeyboardInput(GLFWwindow* window, Camera* this, float delta) {
         glm_vec3_scale(vel, velocity, vel);
         glm_vec3_sub(this->pos, vel, this->pos);
     }
+    if(glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+        vec3 vel = {0.0f, -1.0f, 0.0f};
+        glm_vec3_scale(vel, velocity, vel);
+        glm_vec3_add(this->pos, vel, this->pos);
+    }
+    if(glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+        vec3 vel = {0.0f, 1.0f, 0.0f};
+        glm_vec3_scale(vel, velocity, vel);
+        glm_vec3_add(this->pos, vel, this->pos);
+    }
+    if(glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) {
+        printf("%.1f, %.1f, %.1f\n", this->dir[0], this->dir[1], this->dir[2]);
+    }
 }
 
 void processCameraMouseInput(Camera* this, float xOffset, float yOffset) {

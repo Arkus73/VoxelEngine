@@ -19,6 +19,7 @@
 
 // C includes
 
+// TODO: Kommentare in ringBuffer.c und bei dynamicallyUnloadAndLoadChunks() ergänzen!!!
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -53,7 +54,7 @@ int main() {
     unsigned int blockAtlas = createTexture("../assets/blockAtlas.png", GL_NEAREST);
     setInt(shader, "blockAtlas", 0);
 
-    cam = createCamera((vec3) {2.0f, 0.0f, 30.0f}, -90.0f, 0.0f);
+    cam = createCamera((vec3) {0.0f, 10.0f, 0.0f}, -90.0f, 0.0f);
     
     initBlocks();
     generateWorld();
@@ -97,7 +98,7 @@ int main() {
 
     destroyChunks();
     destroyBlocks();
-
+    destroyChunks();
     glfwTerminate();
     return 0;
 }
@@ -106,7 +107,12 @@ void processInput(GLFWwindow* window, float delta) {
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     }
+    vec3 lastPlayerPos;
+    glm_vec3_copy(cam->pos, lastPlayerPos);
     processCameraKeyboardInput(window, cam, delta);
+    if(lastPlayerPos[0] != cam->pos[0] || lastPlayerPos[2] != cam->pos[2]) {
+        dynamicallyUnloadAndLoadChunks(lastPlayerPos, cam->pos);
+    }
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
