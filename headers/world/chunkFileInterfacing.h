@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-void saveChunk(uint8_t* blocks, int x, int z);
-uint8_t* loadChunkData(int x, int z);
+void saveChunk(uint8_t* blocks, int gcx, int gcz);
+uint8_t* loadChunkData(int gcx, int gcz);
 
 #endif

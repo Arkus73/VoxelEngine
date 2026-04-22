@@ -19,7 +19,8 @@
 
 // C includes
 
-// TODO: Kommentare in ringBuffer.c und bei dynamicallyUnloadAndLoadChunks() ergänzen!!!
+// TODO: Kommentare in ringBuffer.c und bei dynamicallyUnloadAndLoadChunks() ergänzen!!
+// TODO: dynamisches Chunk-Laden auch an den Rändern möglich machen
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -65,7 +66,7 @@ int main() {
 
     glEnable(GL_DEPTH_TEST);    // Depth-Test wird angeschaltet, um zu gewährleisten, dass die 3D-Drawing-Order eingehalten wird
 
-    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);  // Wireframe-Modus falls nötig
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);  // Wireframe-Modus falls nötig
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);    // Cursor wird im Fenster gecatched
 
@@ -111,7 +112,7 @@ void processInput(GLFWwindow* window, float delta) {
     glm_vec3_copy(cam->pos, lastPlayerPos);
     processCameraKeyboardInput(window, cam, delta);
     if(lastPlayerPos[0] != cam->pos[0] || lastPlayerPos[2] != cam->pos[2]) {
-        dynamicallyUnloadAndLoadChunks(lastPlayerPos, cam->pos);
+        dynamicallyLoadAndUnloadChunks(lastPlayerPos, cam->pos);
     }
 }
 

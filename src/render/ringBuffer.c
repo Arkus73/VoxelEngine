@@ -25,12 +25,15 @@ void destroyChunkRingBuffer2D(ChunkRingBuffer2D* this) {
     free(this);
 }
 
-Chunk* getFromChunkRingBuffer2D(ChunkRingBuffer2D* this, int indexX, int indexZ) {
-    return this->buffer[((this->startX + indexX) % this->rowLen) * this->rowLen + (this->startZ + indexZ) % this->rowLen];
+Chunk* getFromChunkRingBuffer2D(ChunkRingBuffer2D* this, int lcx, int lcz) {
+    if(lcx < 0 || lcx >= this->rowLen || lcz < 0 || lcz >= this->rowLen) {
+        return NULL;
+    }
+    return this->buffer[((this->startX + lcx) % this->rowLen) * this->rowLen + (this->startZ + lcz) % this->rowLen];
 }
 
-void writeToChunkRingBuffer2D(ChunkRingBuffer2D* this, int indexX, int indexZ, Chunk* chunk) {
-    this->buffer[((this->startX + indexX) % this->rowLen) * this->rowLen + (this->startZ + indexZ) % this->rowLen] = chunk;
+void writeToChunkRingBuffer2D(ChunkRingBuffer2D* this, int lcx, int lcz, Chunk* chunk) {
+    this->buffer[((this->startX + lcx) % this->rowLen) * this->rowLen + (this->startZ + lcz) % this->rowLen] = chunk;
 }
 
 void incrementStartX(ChunkRingBuffer2D* this) {

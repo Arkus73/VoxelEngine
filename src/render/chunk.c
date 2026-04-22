@@ -11,9 +11,9 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define BLOCK_AT(x, y, z) blocks[(x) * CHUNK_HEIGHT * CHUNK_DEPTH + (y) * CHUNK_DEPTH + (z)]    // x, y und z in Klammern, damit Rechenreihenfolge auch bspw. bei x = x + 1 eingehalten wird
+#define BLOCK_AT(bx, by, bz) blocks[(bx) * CHUNK_HEIGHT * CHUNK_DEPTH + (by) * CHUNK_DEPTH + (bz)]    // bx, by und bz in Klammern, damit Rechenreihenfolge auch bspw. bei x = x + 1 eingehalten wird
 
-Chunk* createChunk(uint8_t* blocks, int x, int z) {
+Chunk* createChunk(uint8_t* blocks, int gcx, int gcz) {
 
     Chunk* this = malloc(sizeof(Chunk));
 
@@ -21,8 +21,8 @@ Chunk* createChunk(uint8_t* blocks, int x, int z) {
         throwException("Memory couldn't be allocated");
     }
     
-    this->x = x;
-    this->z = z;
+    this->x = gcx;
+    this->z = gcz;
 
     this->blocks = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t));
     if(this->blocks == NULL) {
@@ -42,10 +42,10 @@ void destroyChunk(Chunk* this) {
     free(this);
 }
 
-void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicArray* indices, int x, int y, int z);
+uint8_t getBlock(int gx, int gy, int gz);
+void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicArray* indices, int bx, int by, int bz);
 void addIndicesToChunkMesh(DynamicArray* indices, unsigned int startIndex);
-void addVertexToChunkMesh(Face face, DynamicArray* vertices, float x, float y, float z, float texCoordX, float texCoordY);
-
+void addVertexToChunkMesh(Face face, DynamicArray* vertices, float bx, float by, float bz, float texCoordX, float texCoordY);
 
 void updateChunkMesh(Chunk* this) {
 
@@ -55,72 +55,40 @@ void updateChunkMesh(Chunk* this) {
     DynamicArray* indices = createDynamicArray(sizeof(unsigned int), 2e3, true);
 
     // Es wird durch den blocks-Array iteriert und sämtliche Faces der Blöcke, die gesehen werden können werden dem neuen Chunk-Mesh hinzugefügt
-    for(int x = 0; x < CHUNK_WIDTH; x++) {
-        for(int y = 0; y < CHUNK_HEIGHT; y++) {
-            for(int z = 0; z < CHUNK_DEPTH; z++) {
+    for(int bx = 0; bx < CHUNK_WIDTH; bx++) {
+        for(int by = 0; by < CHUNK_HEIGHT; by++) {
+            for(int bz = 0; bz < CHUNK_DEPTH; bz++) {
 
-                if(this->BLOCK_AT(x, y, z) == BLOCK_AIR) {
+                if(this->BLOCK_AT(bx, by, bz) == BLOCK_AIR) {
                     continue;
                 }
 
-                Block currentBlock = TO_VALUE(Block) getFromDynamicArray(blockRegistry, this->BLOCK_AT(x, y, z));
+                Block currentBlock = TO_VALUE(Block) getFromDynamicArray(blockRegistry, this->BLOCK_AT(bx, by, bz));
 
                 // (x, y, z) ist die Position des linken, unteren, hinteren Vertex
                 // Falls Face sichtbar ist (an Luft grenzt), wird es dem Chunk-Mesh hinzugefügt
 
-                if(z == CHUNK_DEPTH - 1) {   // Handelt es sich um einen Block am vorderen Rand?
-                    if((this->z + 1) >= loadedChunks->offsetZ + loadedChunks->rowLen) {   // Befindet er sich in einem Randchunk?
-                        addFaceToChunkMesh(currentBlock, FRONT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
-                    } else {
-                        if(getFromChunkRingBuffer2D(loadedChunks, this->x - loadedChunks->offsetX, this->z - loadedChunks->offsetZ + 1)->BLOCK_AT(x, y, 0) == BLOCK_AIR) {   // Ist anliegende Block im nächsten Chunk Luft?
-                            addFaceToChunkMesh(currentBlock, FRONT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
-                        }
-                    }
-                } else if(this->BLOCK_AT(x, y, z + 1) == BLOCK_AIR) {   // Ist es kein Block am vorderen Rand, ist der Block vor ihm im momentanen Chunk Luft?
-                    addFaceToChunkMesh(currentBlock, FRONT, vertices, indices, x, y, z);
+                int gx = this->x * CHUNK_WIDTH + bx;
+                int gy = by;
+                int gz = this->z * CHUNK_DEPTH + bz;
+                
+                if(getBlock(gx, gy, gz + 1) == BLOCK_AIR) {
+                    addFaceToChunkMesh(currentBlock, FRONT, vertices, indices, bx, by, bz);
                 }
-
-                if(z == 0) {   // Handelt es sich um einen Block am hinteren Rand?
-                    if((this->z - 1) < loadedChunks->offsetZ) {   // Befindet er sich in einem Randchunk?
-                        addFaceToChunkMesh(currentBlock, BACK, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
-                    } else {
-                        if(getFromChunkRingBuffer2D(loadedChunks, this->x - loadedChunks->offsetX, this->z - loadedChunks->offsetZ - 1)->BLOCK_AT(x, y, CHUNK_WIDTH - 1) == BLOCK_AIR) {   // Ist anliegende Block im nächsten Chunk Luft?
-                            addFaceToChunkMesh(currentBlock, BACK, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
-                        }
-                    }
-                } else if(this->BLOCK_AT(x, y, z - 1) == BLOCK_AIR) {   // Ist es kein Block am hinteren Rand, ist der Block hinter ihm im momentanen Chunk Luft?
-                    addFaceToChunkMesh(currentBlock, BACK, vertices, indices, x, y, z);
+                if(getBlock(gx, gy, gz - 1) == BLOCK_AIR) {
+                    addFaceToChunkMesh(currentBlock, BACK, vertices, indices, bx, by, bz);
                 }
-
-                if(y == CHUNK_HEIGHT - 1 || this->BLOCK_AT(x, y + 1, z) == BLOCK_AIR) {
-                    addFaceToChunkMesh(currentBlock, TOP, vertices, indices, x, y, z);
+                if(getBlock(gx, gy + 1, gz) == BLOCK_AIR) {
+                    addFaceToChunkMesh(currentBlock, TOP, vertices, indices, bx, by, bz);
                 }
-                if(y == 0 || this->BLOCK_AT(x, y - 1, z) == BLOCK_AIR) {
-                    addFaceToChunkMesh(currentBlock, BOTTOM, vertices, indices, x, y, z);
+                if(getBlock(gx, gy - 1, gz) == BLOCK_AIR) {
+                    addFaceToChunkMesh(currentBlock, BOTTOM, vertices, indices, bx, by, bz);
                 }
-
-                if(x == CHUNK_WIDTH - 1) {   // Handelt es sich um einen Block am rechten Rand?
-                    if((this->x + 1) >= loadedChunks->offsetX + loadedChunks->rowLen) {   // Befindet er sich in einem Randchunk?
-                        addFaceToChunkMesh(currentBlock, RIGHT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
-                    } else {
-                        if(getFromChunkRingBuffer2D(loadedChunks, this->x - loadedChunks->offsetX + 1, this->z - loadedChunks->offsetZ)->BLOCK_AT(0, y, z) == BLOCK_AIR) {   // Ist anliegende Block im nächsten Chunk Luft?
-                            addFaceToChunkMesh(currentBlock, RIGHT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
-                        }
-                    }
-                } else if(this->BLOCK_AT(x + 1, y, z) == BLOCK_AIR) {   // Ist es kein Block am rechten Rand, ist der Block rechts von ihm im momentanen Chunk Luft?
-                    addFaceToChunkMesh(currentBlock, RIGHT, vertices, indices, x, y, z);
+                if(getBlock(gx + 1, gy, gz) == BLOCK_AIR) {
+                    addFaceToChunkMesh(currentBlock, RIGHT, vertices, indices, bx, by, bz);
                 }
-
-                if(x == 0) {   // Handelt es sich um einen Block am linken Rand?
-                    if((this->x - 1) < loadedChunks->offsetX) {   // Befindet er sich in einem Randchunk?
-                        addFaceToChunkMesh(currentBlock, LEFT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
-                    } else {
-                        if(getFromChunkRingBuffer2D(loadedChunks, this->x - loadedChunks->offsetX - 1, this->z - loadedChunks->offsetZ)->BLOCK_AT(CHUNK_WIDTH - 1, y, z) == BLOCK_AIR) {   // Ist anliegende Block im nächsten Chunk Luft?
-                            addFaceToChunkMesh(currentBlock, LEFT, vertices, indices, x, y, z);    // Das Face wird dem Mesh hinzugefügt
-                        }
-                    }
-                } else if(this->BLOCK_AT(x - 1, y, z) == BLOCK_AIR) {   // Ist es kein Block am linken Rand, ist der Block links von ihm im momentanen Chunk Luft?
-                    addFaceToChunkMesh(currentBlock, LEFT, vertices, indices, x, y, z);
+                if(getBlock(gx - 1, gy, gz) == BLOCK_AIR) {
+                    addFaceToChunkMesh(currentBlock, LEFT, vertices, indices, bx, by, bz);
                 }
 
             }
@@ -134,7 +102,34 @@ void updateChunkMesh(Chunk* this) {
     DEINIT_MODULE_DYNAMIC_ARRAY;
 }
 
-void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicArray* indices, int x, int y, int z) {
+int floorDiv(int a, int b) {
+    int r = a / b;
+    if ((a ^ b) < 0 && a % b) r--;
+    return r;
+}
+
+uint8_t getBlock(int gx, int gy, int gz) {
+
+    int lcx = floorDiv(gx, CHUNK_WIDTH) - loadedChunks->offsetX;
+    int lcz = floorDiv(gz, CHUNK_DEPTH) - loadedChunks->offsetZ;
+
+    int bx = (gx % CHUNK_WIDTH + CHUNK_WIDTH) % CHUNK_WIDTH;
+    int bz = (gz % CHUNK_DEPTH + CHUNK_DEPTH) % CHUNK_DEPTH;
+
+    Chunk* chunk = getFromChunkRingBuffer2D(loadedChunks, lcx, lcz);
+
+    if(gy < 0 || gy >= CHUNK_HEIGHT) {
+        return BLOCK_AIR;
+    }
+
+    if(chunk == NULL) {
+        return BLOCK_AIR;
+    }
+
+    return chunk->BLOCK_AT(bx, gy, bz);
+}
+
+void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicArray* indices, int bx, int by, int bz) {
 
     unsigned int startIndex = vertices->len / 8;
 
@@ -146,60 +141,60 @@ void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicA
             // Sämtliche zum Face "FRONT" gehörige Vertices werden dem Mesh hinzugefügt
             texCoordX = block.frontTexture[0];
             texCoordY = block.frontTexture[1];
-            addVertexToChunkMesh(face, vertices, x, y, z + 1, texCoordX, texCoordY);   
-            addVertexToChunkMesh(face, vertices, x + 1, y, z + 1, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
-            addVertexToChunkMesh(face, vertices, x + 1, y + 1, z + 1, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
-            addVertexToChunkMesh(face, vertices, x, y + 1, z + 1, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx, by, bz + 1, texCoordX, texCoordY);   
+            addVertexToChunkMesh(face, vertices, bx + 1, by, bz + 1, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx + 1, by + 1, bz + 1, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx, by + 1, bz + 1, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
             break;
 
         case BACK:
             // Sämtliche zum Face "BACK" gehörige Vertices werden dem Mesh hinzugefügt
             texCoordX = block.backTexture[0];
             texCoordY = block.backTexture[1];
-            addVertexToChunkMesh(face, vertices, x, y + 1, z, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
-            addVertexToChunkMesh(face, vertices, x + 1, y + 1, z, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
-            addVertexToChunkMesh(face, vertices, x + 1, y, z, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
-            addVertexToChunkMesh(face, vertices, x, y, z, texCoordX, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx, by + 1, bz, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx + 1, by + 1, bz, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx + 1, by, bz, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx, by, bz, texCoordX, texCoordY);
             break;
 
         case TOP:
             // Sämtliche zum Face "TOP" gehörige Vertices werden dem Mesh hinzugefügt
             texCoordX = block.topTexture[0];
             texCoordY = block.topTexture[1];
-            addVertexToChunkMesh(face, vertices, x, y + 1, z + 1, texCoordX, texCoordY);
-            addVertexToChunkMesh(face, vertices, x + 1, y + 1, z + 1, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
-            addVertexToChunkMesh(face, vertices, x + 1, y + 1, z, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
-            addVertexToChunkMesh(face, vertices, x, y + 1, z, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx, by + 1, bz + 1, texCoordX, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx + 1, by + 1, bz + 1, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx + 1, by + 1, bz, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx, by + 1, bz, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
             break;
 
         case BOTTOM:
             // Sämtliche zum Face "BOTTOM" gehörige Vertices werden dem Mesh hinzugefügt
             texCoordX = block.bottomTexture[0];
             texCoordY = block.bottomTexture[1];
-            addVertexToChunkMesh(face, vertices, x, y, z, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
-            addVertexToChunkMesh(face, vertices, x + 1, y, z, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
-            addVertexToChunkMesh(face, vertices, x + 1, y, z + 1, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
-            addVertexToChunkMesh(face, vertices, x, y, z + 1, texCoordX, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx, by, bz, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx + 1, by, bz, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx + 1, by, bz + 1, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx, by, bz + 1, texCoordX, texCoordY);
             break;
 
         case RIGHT:
             // Sämtliche zum Face "RIGHT" gehörige Vertices werden dem Mesh hinzugefügt
             texCoordX = block.rightTexture[0];
             texCoordY = block.rightTexture[1];
-            addVertexToChunkMesh(face, vertices, x + 1, y, z + 1, texCoordX, texCoordY);
-            addVertexToChunkMesh(face, vertices, x + 1, y, z, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
-            addVertexToChunkMesh(face, vertices, x + 1, y + 1, z, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
-            addVertexToChunkMesh(face, vertices, x + 1, y + 1, z + 1, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx + 1, by, bz + 1, texCoordX, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx + 1, by, bz, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx + 1, by + 1, bz, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx + 1, by + 1, bz + 1, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
             break;
 
         case LEFT:
             // Sämtliche zum Face "LEFT" gehörige Vertices werden dem Mesh hinzugefügt
             texCoordX = block.leftTexture[0];
             texCoordY = block.leftTexture[1];
-            addVertexToChunkMesh(face, vertices, x, y + 1, z + 1, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
-            addVertexToChunkMesh(face, vertices, x, y + 1, z, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
-            addVertexToChunkMesh(face, vertices, x, y, z, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
-            addVertexToChunkMesh(face, vertices, x, y, z + 1, texCoordX, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx, by + 1, bz + 1, texCoordX, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx, by + 1, bz, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY + RELATIVE_SUBTEXTURE_HEIGHT);
+            addVertexToChunkMesh(face, vertices, bx, by, bz, texCoordX + RELATIVE_SUBTEXTURE_WIDTH, texCoordY);
+            addVertexToChunkMesh(face, vertices, bx, by, bz + 1, texCoordX, texCoordY);
             break;
     }
 
@@ -221,12 +216,12 @@ void addIndicesToChunkMesh(DynamicArray* indices, unsigned int startIndex) {
     addToDynamicArray(indices, &value);
 }
 
-void addVertexToChunkMesh(Face face, DynamicArray* vertices, float x, float y, float z, float texCoordX, float texCoordY) {
+void addVertexToChunkMesh(Face face, DynamicArray* vertices, float bx, float by, float bz, float texCoordX, float texCoordY) {
 
     // aPos-Attribut des Vertex wird gesetzt
-    addToDynamicArray(vertices, &x);
-    addToDynamicArray(vertices, &y);
-    addToDynamicArray(vertices, &z);
+    addToDynamicArray(vertices, &bx);
+    addToDynamicArray(vertices, &by);
+    addToDynamicArray(vertices, &bz);
 
     float normalComponent;
 

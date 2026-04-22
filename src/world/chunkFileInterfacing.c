@@ -1,14 +1,15 @@
 #include "chunkFileInterfacing.h"
 #include "utils.h"
+#include "consts.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 
-void saveChunk(uint8_t* blocks, int x, int z) {
+void saveChunk(uint8_t* blocks, int gcx, int gcz) {
     char filename[256];     // Dateiname wird generiert
-    snprintf(filename, sizeof(filename), "../chunks/chunk_%d_%d.bin", x, z);    
+    snprintf(filename, sizeof(filename), "../chunks/chunk_%d_%d.bin", gcx, gcz);    
 
     FILE* file = fopen(filename, "wb");     // Datei wird geöffnet
     if (file == NULL) {
@@ -23,9 +24,9 @@ void saveChunk(uint8_t* blocks, int x, int z) {
     fclose(file);   // Datei wird geschlossen
 }
 
-uint8_t* loadChunkData(int x, int z) {
+uint8_t* loadChunkData(int gcx, int gcz) {
     char filename[256];     // Dateiname wird generiert
-    snprintf(filename, sizeof(filename), "../chunks/chunk_%d_%d.bin", x, z);
+    snprintf(filename, sizeof(filename), "../chunks/chunk_%d_%d.bin", gcx, gcz);
 
     FILE* file = fopen(filename, "rb");     // Datei wird geöffnet
     if (file == NULL) {

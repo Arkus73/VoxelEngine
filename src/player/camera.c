@@ -4,6 +4,7 @@
 
 #include "camera.h"
 #include "utils.h"
+#include "consts.h"
 #include <string.h>
 
 #define CAMERA_SPEED 5.0f
@@ -86,8 +87,14 @@ void processCameraKeyboardInput(GLFWwindow* window, Camera* this, float delta) {
         glm_vec3_scale(vel, velocity, vel);
         glm_vec3_add(this->pos, vel, this->pos);
     }
-    if(glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) {
-        printf("%.1f, %.1f, %.1f\n", this->dir[0], this->dir[1], this->dir[2]);
+    if(glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+        printf("%.2f, %.2f, %.2f\n", this->dir[0], this->dir[1], this->dir[2]);
+    }
+    if(glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
+        printf("%.0f, %.0f\n", floor(this->pos[0] / CHUNK_WIDTH), floor(this->pos[2] / CHUNK_DEPTH));
+    }
+    if(glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+        printf("%.1f, %.1f, %.1f\n", this->pos[0], this->pos[1], this->pos[2]);
     }
 }
 
