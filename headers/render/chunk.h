@@ -22,8 +22,9 @@ typedef struct {
 } Chunk;
 
 Chunk* createChunk(uint8_t* blocks, int gcx, int gcz);
+void updateChunk(Chunk* this, uint8_t* blocks, int gcx, int gcz);
 void destroyChunk(Chunk* this);
-void updateChunkMesh(Chunk* this);  // Updated das Chunk-Mesh aufgrund des block-Arrays
+void remeshChunk(Chunk* this);  // Updated das Chunk-Mesh aufgrund des block-Arrays
 void renderChunk(Chunk* this, Shader shader);
 
 #endif

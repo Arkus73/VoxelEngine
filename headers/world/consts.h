@@ -7,5 +7,6 @@
 #define CHUNK_WIDTH 8
 #define CHUNK_HEIGHT 16
 #define CHUNK_DEPTH 8
+#define VIEW_DISTANCE
 
 #endif

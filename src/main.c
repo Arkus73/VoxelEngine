@@ -19,9 +19,6 @@
 
 // C includes
 
-// TODO: Kommentare in ringBuffer.c und bei dynamicallyUnloadAndLoadChunks() ergänzen!!
-// TODO: dynamisches Chunk-Laden auch an den Rändern möglich machen
-
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 
@@ -34,6 +31,7 @@ void processInput(GLFWwindow* window, float delta);
 
 int main() {
 
+    // Das Setup findet statt
     glfwInit();
     GLFWwindow* window = InitAndCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Minecraft Clone");
     glfwSetFramebufferSizeCallback(window, default_framebuffer_size_callback);
@@ -41,26 +39,29 @@ int main() {
 
     glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
+    // Die Shader werden geladen
     Shader shader = createShader("../src/shaders/vertex.glsl", "../src/shaders/fragment.glsl");
     use(shader);
 
-    mat4 model, view, proj;
-    glm_mat4_identity(model);
+    // Die nötigen Matrizen werden initialisiert und dem Vertex-Shader übergeben
+    mat4 view, proj;
     glm_mat4_identity(view);
-    glm_perspective(glm_rad(60.0f), (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT, 0.1f, 100.0f, proj);
+    glm_perspective(glm_rad(60.0f), (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT, 0.1f, (RENDER_DISTANCE + 1) * CHUNK_WIDTH * sqrt(2), proj);
 
     setMatrix(shader, "proj", proj);
-    setMatrix(shader, "model", model);
 
+    // Der Block-Atlas wird geladen und ihm wird die Texture-Unit 0 zugeteilt
     unsigned int blockAtlas = createTexture("../assets/blockAtlas.png", GL_NEAREST);
     setInt(shader, "blockAtlas", 0);
 
+    // Die Kamera wird initialisiert
     cam = createCamera((vec3) {0.0f, 10.0f, 0.0f}, -90.0f, 0.0f);
     
+    // Alles zur Welt und Rendering benötigtes wird initialisiert
     initBlocks();
     generateWorld();
     initChunkRenderer();
-    initChunkMeshes();
+    remeshLoadedChunks();
 
     glEnable(GL_CULL_FACE); // Face-Culling wird aktiviert, wodurch Faces, die vom Spieler wegzeigen nicht gerendert werden, was zu deutlich besserer Perfomance führt
 
@@ -97,6 +98,7 @@ int main() {
 
     }
 
+    // Alles wird aufgeräumt
     destroyChunks();
     destroyBlocks();
     destroyChunks();
@@ -105,12 +107,15 @@ int main() {
 }
 
 void processInput(GLFWwindow* window, float delta) {
+    // Wird Escape gedrückt, wird das Fenster geschlossen
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     }
+
     vec3 lastPlayerPos;
     glm_vec3_copy(cam->pos, lastPlayerPos);
-    processCameraKeyboardInput(window, cam, delta);
+    processCameraKeyboardInput(window, cam, delta); // Spieler-Input wird gehandelt
+    // Hat sich der Chunk des Spielers geändert, werden die geladenen Chunks geupdated
     if(lastPlayerPos[0] != cam->pos[0] || lastPlayerPos[2] != cam->pos[2]) {
         dynamicallyLoadAndUnloadChunks(lastPlayerPos, cam->pos);
     }

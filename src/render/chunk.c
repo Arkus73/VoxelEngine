@@ -42,12 +42,18 @@ void destroyChunk(Chunk* this) {
     free(this);
 }
 
+void updateChunk(Chunk* this, uint8_t* blocks, int gcx, int gcz) {
+    memcpy(this->blocks, blocks, CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t));
+    this->x = gcx;
+    this->z = gcz;
+}
+
 uint8_t getBlock(int gx, int gy, int gz);
 void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicArray* indices, int bx, int by, int bz);
 void addIndicesToChunkMesh(DynamicArray* indices, unsigned int startIndex);
 void addVertexToChunkMesh(Face face, DynamicArray* vertices, float bx, float by, float bz, float texCoordX, float texCoordY);
 
-void updateChunkMesh(Chunk* this) {
+void remeshChunk(Chunk* this) {
 
     INIT_MODULE_DYNAMIC_ARRAY;
 
@@ -65,13 +71,12 @@ void updateChunkMesh(Chunk* this) {
 
                 Block currentBlock = TO_VALUE(Block) getFromDynamicArray(blockRegistry, this->BLOCK_AT(bx, by, bz));
 
-                // (x, y, z) ist die Position des linken, unteren, hinteren Vertex
-                // Falls Face sichtbar ist (an Luft grenzt), wird es dem Chunk-Mesh hinzugefügt
-
+                // Die Blockkoordinaten werden in globale Koordinaten umgewandelt
                 int gx = this->x * CHUNK_WIDTH + bx;
                 int gy = by;
                 int gz = this->z * CHUNK_DEPTH + bz;
                 
+                // Falls Face sichtbar ist (an Luft grenzt), wird es dem Chunk-Mesh hinzugefügt
                 if(getBlock(gx, gy, gz + 1) == BLOCK_AIR) {
                     addFaceToChunkMesh(currentBlock, FRONT, vertices, indices, bx, by, bz);
                 }
@@ -110,22 +115,23 @@ int floorDiv(int a, int b) {
 
 uint8_t getBlock(int gx, int gy, int gz) {
 
+    // Die globalen Koordinaten werden erst in gc, dann in lc-Koordinaten umgewandelt
     int lcx = floorDiv(gx, CHUNK_WIDTH) - loadedChunks->offsetX;
     int lcz = floorDiv(gz, CHUNK_DEPTH) - loadedChunks->offsetZ;
 
+    // Aus dem globalen Koordinaten werden nochmal die Blockkoordinaten rekonstruiert
     int bx = (gx % CHUNK_WIDTH + CHUNK_WIDTH) % CHUNK_WIDTH;
     int bz = (gz % CHUNK_DEPTH + CHUNK_DEPTH) % CHUNK_DEPTH;
 
+    // Der Chunk, in dem sich der Block befindet wird geholt
     Chunk* chunk = getFromChunkRingBuffer2D(loadedChunks, lcx, lcz);
 
-    if(gy < 0 || gy >= CHUNK_HEIGHT) {
+    // Sind die Koordinaten out of Bounds (-> Block daneben ist am Map-Rand) wird BLOCK_AIR ausgegeben und das Face, um das es geht, wird dem Mesh hinzugefügt
+    if(gy < 0 || gy >= CHUNK_HEIGHT || chunk == NULL) {
         return BLOCK_AIR;
     }
 
-    if(chunk == NULL) {
-        return BLOCK_AIR;
-    }
-
+    // Ansonsten wird der gesuchte Block ausgegebenW
     return chunk->BLOCK_AT(bx, gy, bz);
 }
 
@@ -204,15 +210,16 @@ void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicA
 void addIndicesToChunkMesh(DynamicArray* indices, unsigned int startIndex) {
     unsigned int value = startIndex;
     addToDynamicArray(indices, &value);
-    value = startIndex + 1;
+    value++;
     addToDynamicArray(indices, &value);
-    value = startIndex + 2;
+    value++;
     addToDynamicArray(indices, &value);
+
     value = startIndex;
     addToDynamicArray(indices, &value);
-    value = startIndex + 2;
+    value += 2;
     addToDynamicArray(indices, &value);
-    value = startIndex + 3;
+    value++;
     addToDynamicArray(indices, &value);
 }
 

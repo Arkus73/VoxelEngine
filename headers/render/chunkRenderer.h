@@ -7,7 +7,7 @@
 extern ChunkRingBuffer2D* loadedChunks;
 
 void initChunkRenderer();
-void initChunkMeshes();
+void remeshLoadedChunks();
 void renderChunks(Shader shader);
 void dynamicallyLoadAndUnloadChunks(vec3 lastPlayerPos, vec3 playerPos);
 void destroyChunks();
