@@ -46,7 +46,7 @@ int main() {
     // Die nötigen Matrizen werden initialisiert und dem Vertex-Shader übergeben
     mat4 view, proj;
     glm_mat4_identity(view);
-    glm_perspective(glm_rad(60.0f), (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT, 0.1f, (RENDER_DISTANCE + 1) * CHUNK_WIDTH * sqrt(2), proj);
+    glm_perspective(glm_rad(FOV), (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT, 0.1f, (RENDER_DISTANCE + 5) * CHUNK_WIDTH * sqrt(2), proj);
 
     setMatrix(shader, "proj", proj);
 
@@ -73,7 +73,11 @@ int main() {
 
     float lastFrame = glfwGetTime();
 
+    int frames = 0;
+
     while(!glfwWindowShouldClose(window)) {
+
+        frames++;
         
         glClearColor(0.55f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -91,13 +95,14 @@ int main() {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, blockAtlas);
 
-        renderChunks(shader);
+        renderChunks(shader, view, proj);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
 
     }
 
+    printf("Mittlere FPS: %f\n", frames / glfwGetTime());
     // Alles wird aufgeräumt
     destroyChunks();
     destroyBlocks();

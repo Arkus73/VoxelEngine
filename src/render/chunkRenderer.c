@@ -4,7 +4,9 @@
 #include "consts.h"
 #include "utils.h"
 #include "block.h"
+#include "camera.h"
 
+#include <cglm/cglm.h>
 #include <stdlib.h>
 
 ChunkRingBuffer2D* loadedChunks;
@@ -35,10 +37,107 @@ void remeshLoadedChunks() {
     }
 }
 
-void renderChunks(Shader shader) {
+// ------------------------------------------------------------------------------------------------------
+//                                          FRUSTUM CULLING
+// ------------------------------------------------------------------------------------------------------
+
+typedef struct {
+
+    vec3 normal;
+    float distance;
+
+} Plane;
+
+typedef struct {
+
+    Plane planes[6];
+    
+} Frustum;
+
+void normalizePlanes(Frustum* this) {
+    for(int i = 0; i < 6; i++) {
+        float magnitude = glm_vec3_norm(this->planes[i].normal);
+        glm_vec3_divs(this->planes[i].normal, magnitude, this->planes[i].normal);
+        this->planes[i].distance /= magnitude;
+    }
+}
+
+bool isChunkInFrustum(Frustum this, float gx, float gy, float gz, float width, float height, float depth) {
+
+    for(int i = 0; i < 6; i++) {
+
+        /* Für jeden Punkt wird gecheckt: Befindet sich der Punkt vor der Frustumseite (also auf der Seite der Frustumseite, die ins innere des Frustums zeigt)? 
+        Falls ja: Dasselbe wird für die nächste Frustumseite gecheckt, Falls nein: Es wird für den nächsten Eckpunkt gecheckt */
+        if(this.planes[i].normal[0] * gx + this.planes[i].normal[1] * gy + this.planes[i].normal[2] * gz + this.planes[i].distance > 0) {
+            continue;
+        }
+        if(this.planes[i].normal[0] * (gx + width) + this.planes[i].normal[1] * gy + this.planes[i].normal[2] * gz + this.planes[i].distance > 0) {
+            continue;
+        }
+        if(this.planes[i].normal[0] * gx + this.planes[i].normal[1] * (gy + height) + this.planes[i].normal[2] * gz + this.planes[i].distance > 0) {
+            continue;
+        }
+        if(this.planes[i].normal[0] * gx + this.planes[i].normal[1] * gy + this.planes[i].normal[2] * (gz + depth) + this.planes[i].distance > 0) {
+            continue;
+        }
+        if(this.planes[i].normal[0] * (gx + width) + this.planes[i].normal[1] * (gy + height) + this.planes[i].normal[2] * gz + this.planes[i].distance > 0) {
+            continue;
+        }
+        if(this.planes[i].normal[0] * (gx + width) + this.planes[i].normal[1] * gy + this.planes[i].normal[2] * (gz + depth) + this.planes[i].distance > 0) {
+            continue;
+        }
+        if(this.planes[i].normal[0] * gx + this.planes[i].normal[1] * (gy + height) + this.planes[i].normal[2] * (gz + depth) + this.planes[i].distance > 0) {
+            continue;
+        }
+        if(this.planes[i].normal[0] * (gx + width) + this.planes[i].normal[1] * (gy + height) + this.planes[i].normal[2] * (gz + depth) + this.planes[i].distance > 0) {
+            continue;
+        }
+
+        // Befindet sich bei einer Frustumseite kein Eckpunkt des Chunks davor, ist der Chunk außerhalb des Frustums
+        return false;
+    }
+
+    // Gibt es für jede Frustumseite mindestens einen Eckpunkt, der sich davor befindet, ist der Chunk innerhalb des Frustums
+    return true;
+}
+
+void renderChunks(Shader shader, mat4 view, mat4 proj) {
+    Frustum frustum;
+
     for(int lcx = 0; lcx < loadedChunks->rowLen; lcx++) {
         for(int lcz = 0; lcz < loadedChunks->rowLen; lcz++) {
-            renderChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, lcz), shader);
+
+            Chunk* chunk = getFromChunkRingBuffer2D(loadedChunks, lcx, lcz);
+
+            // Die World-Matrix wird berechnet
+            mat4 clip;
+            glm_mat4_mul(proj, view, clip);
+            
+            // Alle Seiten des Frustums werden aus der World-Matrix extrahiert und normalisiert
+            glm_vec3_copy((vec3) {clip[0][3] - clip[0][0], clip[1][3] - clip[1][0], clip[2][3] - clip[2][0]}, frustum.planes[RIGHT].normal);
+            frustum.planes[RIGHT].distance = clip[3][3] - clip[3][0];
+
+            glm_vec3_copy((vec3) {clip[0][3] + clip[0][0], clip[1][3] + clip[1][0], clip[2][3] + clip[2][0]}, frustum.planes[LEFT].normal);
+            frustum.planes[LEFT].distance = clip[3][3] + clip[3][0];
+
+            glm_vec3_copy((vec3) {clip[0][3] + clip[0][1], clip[1][3] + clip[1][1], clip[2][3] + clip[2][1]}, frustum.planes[BOTTOM].normal);
+            frustum.planes[BOTTOM].distance = clip[3][3] + clip[3][1];
+
+            glm_vec3_copy((vec3) {clip[0][3] - clip[0][1], clip[1][3] - clip[1][1], clip[2][3] - clip[2][1]}, frustum.planes[TOP].normal);
+            frustum.planes[TOP].distance = clip[3][3] - clip[3][1];
+
+            glm_vec3_copy((vec3) {clip[0][3] - clip[0][2], clip[1][3] - clip[1][2], clip[2][3] - clip[2][2]}, frustum.planes[BACK].normal);
+            frustum.planes[BACK].distance = clip[3][3] - clip[3][2];
+
+            glm_vec3_copy((vec3) {clip[0][3] + clip[0][2], clip[1][3] + clip[1][2], clip[2][3] + clip[2][2]}, frustum.planes[FRONT].normal);
+            frustum.planes[FRONT].distance = clip[3][3] + clip[3][2];
+
+            normalizePlanes(&frustum);
+
+            // Befindet sich ein Chunk im Sichtfeld, wird er gerendert. Ansonsten nicht
+            if(isChunkInFrustum(frustum, (float) chunk->x * CHUNK_WIDTH, -CHUNK_HEIGHT / 2.0f, (float) chunk->z * CHUNK_DEPTH, (float) CHUNK_WIDTH, (float) CHUNK_HEIGHT, (float) CHUNK_DEPTH)) {
+                renderChunk(chunk, shader);
+            }
         }
     }
 }

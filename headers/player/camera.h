@@ -1,6 +1,8 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#include <glfw/glfw3.h>
+
 typedef struct {
     vec3 pos;
     vec3 dir;

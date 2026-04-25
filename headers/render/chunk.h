@@ -7,12 +7,12 @@
 #include <stdint.h>
 
 typedef enum {
-    FRONT,
-    BACK,
-    TOP,
-    BOTTOM,
-    RIGHT,
-    LEFT
+    FRONT = 0,
+    BACK = 1,
+    TOP = 2,
+    BOTTOM = 3,
+    RIGHT = 4,
+    LEFT = 5
 } Face;
 
 typedef struct {

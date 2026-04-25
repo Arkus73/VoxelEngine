@@ -8,6 +8,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+// TODO Ordentliche Terrain-Generation mit Simplex-Noise -> Height-Map implementieren
+
 void generateWorld() {
 
     uint8_t* blocks = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t));
