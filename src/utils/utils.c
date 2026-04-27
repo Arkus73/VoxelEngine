@@ -83,3 +83,7 @@ unsigned int createTexture(const char* dir, int filter) {
 
     return texture;
 }
+
+int modulo(int a, int b) {
+    return (a % b + b) % b;
+}

@@ -20,10 +20,10 @@ void initChunkRenderer() {
         }
     }
     voidChunkData = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t)); // Die VoidChunk-Daten (-> Chunk, der nur aus Luftblöcken besteht) werden generiert
-    for(int lcx = 0; lcx < CHUNK_WIDTH; lcx++) {
-        for(int y = 0; y < CHUNK_HEIGHT; y++) {
-            for(int lcz = 0; lcz < CHUNK_DEPTH; lcz++) {
-                voidChunkData[lcx * CHUNK_HEIGHT * CHUNK_DEPTH + y * CHUNK_DEPTH + lcz] = BLOCK_AIR;
+    for(int bx = 0; bx < CHUNK_WIDTH; bx++) {
+        for(int by = 0; by < CHUNK_HEIGHT; by++) {
+            for(int bz = 0; bz < CHUNK_DEPTH; bz++) {
+                voidChunkData[bx * CHUNK_HEIGHT * CHUNK_DEPTH + by * CHUNK_DEPTH + bz] = BLOCK_AIR;
             }
         }
     }

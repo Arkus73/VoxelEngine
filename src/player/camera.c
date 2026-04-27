@@ -53,6 +53,9 @@ void getCameraView(Camera* this, mat4 dest) {
 
 void processCameraKeyboardInput(GLFWwindow* window, Camera* this, float delta) {
     float velocity = CAMERA_SPEED * delta;
+    if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+        velocity *= 2;
+    }
     if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
         vec3 vel;
         glm_vec3_copy(this->dir, vel);

@@ -1,6 +1,6 @@
 #ifndef WORLD_GENERATOR_H
 #define WORLD_GENERATOR_H
 
-void generateWorld();
+void generateWorld(int seed, float frequency);
 
 #endif

@@ -29,7 +29,21 @@ bool firstMouse = true;
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window, float delta);
 
-int main() {
+int main(int argc, char** argv) {
+
+    // Die Anfangsargumente werden geparst
+    if(argc != 3) {
+        throwException("Not enough arguments were given.");
+    }
+    char* endptr;
+    int seed = strtol(argv[1], &endptr, 10);
+    if(endptr == argv[1]) {
+        throwException("Seed couldn't be parsed");
+    }
+    float frequency = strtof(argv[2], &endptr);
+    if(endptr == argv[2]) {
+        throwException("Frequency couldn't be parsed");
+    }
 
     // Das Setup findet statt
     glfwInit();
@@ -55,11 +69,11 @@ int main() {
     setInt(shader, "blockAtlas", 0);
 
     // Die Kamera wird initialisiert
-    cam = createCamera((vec3) {0.0f, 10.0f, 0.0f}, -90.0f, 0.0f);
+    cam = createCamera((vec3) {0.0f, 20.0f, 0.0f}, -90.0f, 0.0f);
     
     // Alles zur Welt und Rendering benötigtes wird initialisiert
     initBlocks();
-    generateWorld();
+    generateWorld(seed, frequency);
     initChunkRenderer();
     remeshLoadedChunks();
 
@@ -67,7 +81,7 @@ int main() {
 
     glEnable(GL_DEPTH_TEST);    // Depth-Test wird angeschaltet, um zu gewährleisten, dass die 3D-Drawing-Order eingehalten wird
 
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);  // Wireframe-Modus falls nötig
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);  // Wireframe-Modus falls nötig
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);    // Cursor wird im Fenster gecatched
 

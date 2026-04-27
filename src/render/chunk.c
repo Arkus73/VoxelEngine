@@ -120,8 +120,8 @@ uint8_t getBlock(int gx, int gy, int gz) {
     int lcz = floorDiv(gz, CHUNK_DEPTH) - loadedChunks->offsetZ;
 
     // Aus dem globalen Koordinaten werden nochmal die Blockkoordinaten rekonstruiert
-    int bx = (gx % CHUNK_WIDTH + CHUNK_WIDTH) % CHUNK_WIDTH;
-    int bz = (gz % CHUNK_DEPTH + CHUNK_DEPTH) % CHUNK_DEPTH;
+    int bx = modulo(gx, CHUNK_WIDTH);
+    int bz = modulo(gz, CHUNK_DEPTH);
 
     // Der Chunk, in dem sich der Block befindet wird geholt
     Chunk* chunk = getFromChunkRingBuffer2D(loadedChunks, lcx, lcz);
