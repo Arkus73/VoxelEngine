@@ -6,11 +6,13 @@
 
 GLFWwindow* InitAndCreateWindow(int windowWidth, int windowHeight, const char* title);  // Initialisiert Glad und erstellt ein Fenster
 void default_framebuffer_size_callback(GLFWwindow* window, int width, int height);     // Callback-Funktion bei Window Resize
-void throwException(char* msg);
+void __MINGW_ATTRIB_NORETURN throwException(char* msg);
 float clamp(float value, float min, float max);
 float randf(float lowerBound, float upperBound);
 bool randomise(float probability);
 unsigned int createTexture(const char* dir, int filter);
 int modulo(int a, int b);
+bool isLocalChunkValid(int lcx, int lcz);
+bool isGlobalChunkValid(int gcx, int gcz);
 
 #endif

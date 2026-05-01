@@ -10,7 +10,7 @@ Mesh* initMesh() {
     Mesh* this = malloc(sizeof(Mesh));
 
     if(this == NULL) {
-        throwException("Memory couldn't be allocated");
+        throwException("Memory for Mesh couldn't be allocated");
     }
 
     // Buffers und VAO werden initialisiert

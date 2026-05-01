@@ -7,7 +7,6 @@
 #include "shader.h"
 #include "stb_image.h"
 #include "utils.h"
-#include "dynamicArray.h"
 
 // world und render includes
 #include "chunkRenderer.h"
@@ -87,7 +86,7 @@ int main(int argc, char** argv) {
 
     float lastFrame = glfwGetTime();
 
-    int frames = 0;
+    long int frames = 0;
 
     while(!glfwWindowShouldClose(window)) {
 
@@ -118,9 +117,9 @@ int main(int argc, char** argv) {
 
     printf("Mittlere FPS: %f\n", frames / glfwGetTime());
     // Alles wird aufgeräumt
-    destroyChunks();
+    system("del ..\\chunks\\*.bin");
+    deinitChunkRenderer();
     destroyBlocks();
-    destroyChunks();
     glfwTerminate();
     return 0;
 }
@@ -135,7 +134,7 @@ void processInput(GLFWwindow* window, float delta) {
     glm_vec3_copy(cam->pos, lastPlayerPos);
     processCameraKeyboardInput(window, cam, delta); // Spieler-Input wird gehandelt
     // Hat sich der Chunk des Spielers geändert, werden die geladenen Chunks geupdated
-    if(lastPlayerPos[0] != cam->pos[0] || lastPlayerPos[2] != cam->pos[2]) {
+    if(floor(lastPlayerPos[0] / CHUNK_WIDTH) != floor(cam->pos[0] / CHUNK_WIDTH) || floor(lastPlayerPos[2] / CHUNK_DEPTH) != floor(cam->pos[2] / CHUNK_DEPTH)) {
         dynamicallyLoadAndUnloadChunks(lastPlayerPos, cam->pos);
     }
 }

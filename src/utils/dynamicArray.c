@@ -7,14 +7,12 @@
 
 #define ADDRESS_AT_INDEX(this, index) ((char*)this->ptr + (index) * this->elementSize)
 
-DynamicArray* dynamicArrays;
-
 void destroyDynamicArray(DynamicArray* this) {
     free(this->ptr);
     free(this);
 }
 
-DynamicArray* createDynamicArray(size_t elementSize, int startCapacity, bool registered) {
+DynamicArray* createDynamicArray(size_t elementSize, int startCapacity) {
     DynamicArray* this = malloc(sizeof(DynamicArray));
     if(this == NULL) {
         throwException("Couldn't allocate memory");
@@ -25,9 +23,6 @@ DynamicArray* createDynamicArray(size_t elementSize, int startCapacity, bool reg
     this->ptr = malloc(elementSize * this->capacity);
     if(this->ptr == NULL) {
         throwException("Couldn't allocate memory");
-    }
-    if(registered) {
-        addToDynamicArray(dynamicArrays, &this);
     }
     return this;
 }
@@ -57,6 +52,7 @@ void removeByIndexFromDynamicArray(DynamicArray* this, int index) {
     this->len--;
     if(this->len <= this->capacity / 2) {
         this->capacity /= 2;
+        this->capacity = (this->capacity == 0) ? 1 : this->capacity;
         void* newPtr = realloc(this->ptr, this->capacity * this->elementSize);
         if(newPtr == NULL) {
             throwException("Couldn't allocate memory");

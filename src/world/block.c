@@ -13,7 +13,7 @@ Block stone = createBlock(STONE, TC(14 * SUBTEXTURE_WIDTH, ATLAS_HEIGHT - SUBTEX
 DynamicArray* blockRegistry;
 
 void initBlocks() {
-    blockRegistry = createDynamicArray(sizeof(Block), 10, false);
+    blockRegistry = createDynamicArray(sizeof(Block), 10);
     addToDynamicArray(blockRegistry, &air);
     addToDynamicArray(blockRegistry, &dirt);
     addToDynamicArray(blockRegistry, &grass);

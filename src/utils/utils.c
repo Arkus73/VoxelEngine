@@ -7,6 +7,8 @@
 #include <time.h>
 #include "utils.h"
 #include "stb_image.h"
+#include "chunkRenderer.h"
+#include "consts.h"
 
 GLFWwindow* InitAndCreateWindow(int windowWidth, int windowHeight, const char* title) {
 
@@ -32,7 +34,7 @@ void default_framebuffer_size_callback(GLFWwindow* window, int width, int height
     glViewport(0, 0, width, height);    // Viewport wird an neue Fenstergröße angepasst
 }
 
-void throwException(char* msg) {
+void __MINGW_ATTRIB_NORETURN throwException(char* msg) {
     printf("%s\n", msg);
     glfwTerminate();
     exit(EXIT_FAILURE);
@@ -86,4 +88,14 @@ unsigned int createTexture(const char* dir, int filter) {
 
 int modulo(int a, int b) {
     return (a % b + b) % b;
+}
+
+bool isLocalChunkValid(int lcx, int lcz){   // Prüft, ob sich die lc-Koordinaten innerhalb der Welt befinden
+    int gcx = loadedChunks->offsetX + lcx;
+    int gcz = loadedChunks->offsetZ + lcz;
+    return (gcx <= WORLD_WIDTH / 2 && gcx >= -WORLD_WIDTH / 2) && (gcz <= WORLD_DEPTH / 2 && gcz >= -WORLD_DEPTH / 2);
+}
+
+bool isGlobalChunkValid(int gcx, int gcz){   // Prüft, ob sich die gc-Koordinaten innerhalb der Welt befinden
+    return (gcx <= WORLD_WIDTH / 2 && gcx >= -WORLD_WIDTH / 2) && (gcz <= WORLD_DEPTH / 2 && gcz >= -WORLD_DEPTH / 2);
 }

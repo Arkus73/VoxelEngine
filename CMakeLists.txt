@@ -39,6 +39,7 @@ add_executable(Test
     src/utils/stb_image.c
     src/utils/utils.c
     src/utils/dynamicArray.c
+    src/utils/queue.c
     
 )
 

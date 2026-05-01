@@ -10,7 +10,7 @@ ChunkRingBuffer2D* createChunkRingBuffer2D() {
     }
 
     this->buffer = malloc(pow(2 * RENDER_DISTANCE + 1, 2) * sizeof(Chunk*));
-    if(this == NULL) {
+    if(this->buffer == NULL) {
         throwException("Memory for ChunkRingBuffer2D couldn't be allocated");
     }
 
@@ -22,6 +22,7 @@ ChunkRingBuffer2D* createChunkRingBuffer2D() {
 }
 
 void destroyChunkRingBuffer2D(ChunkRingBuffer2D* this) {
+    free(this->buffer);
     free(this);
 }
 
@@ -29,11 +30,11 @@ Chunk* getFromChunkRingBuffer2D(ChunkRingBuffer2D* this, int lcx, int lcz) {
     if(lcx < 0 || lcx >= this->rowLen || lcz < 0 || lcz >= this->rowLen) {
         return NULL;
     }
-    return this->buffer[((this->startX + lcx) % this->rowLen) * this->rowLen + (this->startZ + lcz) % this->rowLen];
+    return this->buffer[modulo(this->startX + lcx, this->rowLen) * this->rowLen + modulo(this->startZ + lcz, this->rowLen)];
 }
 
 void writeToChunkRingBuffer2D(ChunkRingBuffer2D* this, int lcx, int lcz, Chunk* chunk) {
-    this->buffer[((this->startX + lcx) % this->rowLen) * this->rowLen + (this->startZ + lcz) % this->rowLen] = chunk;
+    this->buffer[modulo(this->startX + lcx, this->rowLen) * this->rowLen + modulo(this->startZ + lcz, this->rowLen)] = chunk;
 }
 
 void incrementStartX(ChunkRingBuffer2D* this) {

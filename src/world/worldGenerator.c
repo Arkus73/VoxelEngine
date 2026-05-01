@@ -77,8 +77,9 @@ float generateSimplexNoise(vec2 point) {
 // Frequency beschreibt, wie schnell die Noise-Werte von Punkt zu Punkt variieren. Je höher, desto chaotischer. Je niedriger, desto flacher.
 void __stdcall generateChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WORK work) {
 
-    int gcx = *(int*) param;
-    int gcz = *(int*) (param + sizeof(int));
+    char* paramBytes = (char*) param;
+    int gcx = *(int*) paramBytes;
+    int gcz = *(int*) (paramBytes + sizeof(int));
 
     // Platz für die Blöcke des Chunks wird allokiert
     uint8_t* blocks = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t));
@@ -92,7 +93,12 @@ void __stdcall generateChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WO
 
             // Das Noise für den globalen Punkt wird erzeugt
             float noise = generateSimplexNoise((vec2) {(float) gx * frequency / 100.0f, (float) gz * frequency / 100.0f});
-            int height = (int) floor((CHUNK_HEIGHT / 4 * noise + 3 * CHUNK_HEIGHT / 4) - 1);  // Damit wird [-1.0f, 1.0f] auf [h / 2, h], also die Höhe, abgebildet
+            int height = (int) floor((CHUNK_HEIGHT / 4 * noise + 3 * CHUNK_HEIGHT / 4) - 1);
+            if(height < 0) {
+                height = 0;
+            } else if(height >= CHUNK_HEIGHT) {
+                height = CHUNK_HEIGHT - 1;
+            }
 
             int bz = modulo(gz, CHUNK_DEPTH);
             // Alles unter der Höhe wird mit Erde aufgefüllt
@@ -116,7 +122,7 @@ void __stdcall generateChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WO
 
 void generateWorld(int paramSeed, float paramFrequency) {
 
-    // Die möglichen Gradienten werden generiert (GRADIENT_COUNT muss immer eine zweierpotenz sein, da sonst hash & (GRADIENT_COUNT - 1) statt hash % GRADIENT_COUNT nicht klappt)
+    // Die möglichen Gradienten werden generiert (GRADIENT_COUNT muss immer eine Zweierpotenz sein, da sonst hash & (GRADIENT_COUNT - 1) statt hash % GRADIENT_COUNT nicht klappt)
     for(int i = 1; i < GRADIENT_COUNT + 1; i++) {
         vec2 gradient = {cos(2.0 * M_PI * GRADIENT_COUNT / i), sin(2.0 * M_PI * GRADIENT_COUNT / i)};
         memcpy(gradients[i - 1], gradient, sizeof(vec2));
@@ -125,18 +131,29 @@ void generateWorld(int paramSeed, float paramFrequency) {
     seed = paramSeed;
     frequency = paramFrequency;
 
-    DynamicArray* works = createDynamicArray(sizeof(PTP_WORK), (WORLD_WIDTH + 1) * (WORLD_DEPTH + 1), false);
+    system("if not exist \"..\\chunks\" mkdir \"..\\chunks\"");
+
+    DynamicArray* works = createDynamicArray(sizeof(PTP_WORK), (WORLD_WIDTH + 1) * (WORLD_DEPTH + 1));
+    DynamicArray* workArgs = createDynamicArray(sizeof(void*), (WORLD_WIDTH + 1) * (WORLD_DEPTH + 1));
     for(int gcx = -WORLD_WIDTH / 2; gcx < WORLD_WIDTH / 2 + 1; gcx++) {
         for(int gcz = -WORLD_DEPTH / 2; gcz < WORLD_DEPTH / 2 + 1; gcz++) {
 
-            // Die Aufgabe, den Chunk bei {gcx, hcz} zu generieren, wird in den Thread-Pool gepackt und in works registriert
-            int args[2] = {gcx, gcz};
+            // Die Aufgabe, den Chunk bei {gcx, gcz} zu generieren, wird in den Thread-Pool gepackt und in works registriert
+            char* args = malloc(2 * sizeof(int));
+            if(args == NULL) {
+                throwException("Memory for ChunkGeneration-Thread couldn't be allocated");
+            }
+
+            memcpy(args, &gcx, sizeof(int));
+            memcpy(args + sizeof(int), &gcz, sizeof(int));
+
             PTP_WORK work = CreateThreadpoolWork(generateChunk, args, NULL);
             if(work == NULL) {
                 throwException("Couldn't create Chunk Generation Work");
             }
             SubmitThreadpoolWork(work);
             addToDynamicArray(works, &work);
+            addToDynamicArray(workArgs, &args);
 
         }
     }
@@ -145,7 +162,8 @@ void generateWorld(int paramSeed, float paramFrequency) {
     for(int i = 0; i < works->len; i++) {
         WaitForThreadpoolWorkCallbacks(TO_VALUE(PTP_WORK)getFromDynamicArray(works, i), false);
         CloseThreadpoolWork(TO_VALUE(PTP_WORK)getFromDynamicArray(works, i));
+        free(TO_VALUE(void*) getFromDynamicArray(workArgs, i));
     }
     destroyDynamicArray(works);
-
+    destroyDynamicArray(workArgs);
 }
