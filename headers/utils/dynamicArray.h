@@ -20,6 +20,6 @@ void addToDynamicArray(DynamicArray* this, void* item);
 void removeByIndexFromDynamicArray(DynamicArray* this, int index);
 void removeByValueFromDynamicArray(DynamicArray* this, void* value);
 void* getFromDynamicArray(DynamicArray* this, int index);
-bool contains(DynamicArray* this, void* value);
+bool doesDynamicArrayContain(DynamicArray* this, void* value);
 
 #endif

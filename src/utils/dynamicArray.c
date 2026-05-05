@@ -75,7 +75,7 @@ void removeByValueFromDynamicArray(DynamicArray* this, void* value) {
     removeByIndexFromDynamicArray(this, index);
 }
 
-bool contains(DynamicArray* this, void* value) {
+bool doesDynamicArrayContain(DynamicArray* this, void* value) {
     bool doesContain = false;
     for(int i = 0; i < this->len; i++) {
         if(memcmp(ADDRESS_AT_INDEX(this, i), value, this->elementSize) == 0) {

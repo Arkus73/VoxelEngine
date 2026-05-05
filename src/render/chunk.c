@@ -5,6 +5,7 @@
 #include "shader.h"
 #include "dynamicArray.h"
 #include "chunkRenderer.h"
+#include "queue.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -53,12 +54,13 @@ void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicA
 void addIndicesToChunkMesh(DynamicArray* indices, unsigned int startIndex);
 void addVertexToChunkMesh(Face face, DynamicArray* vertices, float bx, float by, float bz, float texCoordX, float texCoordY);
 
-void remeshChunk(Chunk* this) {
+void __stdcall remeshChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WORK work) {
 
-    INIT_MODULE_DYNAMIC_ARRAY;
+    DynamicArray* vertices = createDynamicArray(sizeof(float), 8e3);
+    DynamicArray* indices = createDynamicArray(sizeof(unsigned int), 2e3);
 
-    DynamicArray* vertices = createDynamicArray(sizeof(float), 8e3, true);
-    DynamicArray* indices = createDynamicArray(sizeof(unsigned int), 2e3, true);
+    RemeshingWorkArgs* args = (RemeshingWorkArgs*) param;
+    Chunk* this = args->chunk;
 
     // Es wird durch den blocks-Array iteriert und sämtliche Faces der Blöcke, die gesehen werden können werden dem neuen Chunk-Mesh hinzugefügt
     for(int bx = 0; bx < CHUNK_WIDTH; bx++) {
@@ -102,9 +104,11 @@ void remeshChunk(Chunk* this) {
 
     // Zu guter letzt werden die neu generierten Indices und Vertices in das VBO/EBO des Chunk-Meshes gesteckt
 
-    generateMesh(this->mesh, (float*) vertices->ptr, vertices->len, (unsigned int*) indices->ptr, indices->len);
-
-    DEINIT_MODULE_DYNAMIC_ARRAY;
+    RemeshingWorkResult* result = createRemeshingWorkResult(vertices, indices, this, work);
+    EnterCriticalSection(args->resultQueueLock);
+    enqueueToQueue(args->resultQueue, result);
+    LeaveCriticalSection(args->resultQueueLock);
+    free(param);
 }
 
 int floorDiv(int a, int b) {

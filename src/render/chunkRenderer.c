@@ -5,12 +5,18 @@
 #include "utils.h"
 #include "block.h"
 #include "camera.h"
+#include "queue.h"
 
 #include <cglm/cglm.h>
 #include <stdlib.h>
+#include <windows.h>
 
 ChunkRingBuffer2D* loadedChunks;
 uint8_t* voidChunkData;
+Queue* resultQueue;
+CRITICAL_SECTION resultQueueLock;
+DynamicArray* currentRemeshingWorkBatch;
+DynamicArray* queuedChunkMovements;
 
 void initChunkRenderer() {
     loadedChunks = createChunkRingBuffer2D();   // Die geladenen Chunks werden initialisiert
@@ -27,12 +33,57 @@ void initChunkRenderer() {
             }
         }
     }
+    // Alles zur Synchronisation benötigte wird initialisiert
+    resultQueue = createQueue();
+    queuedChunkMovements = createDynamicArray(sizeof(vec2), 1);
+    InitializeCriticalSection(&resultQueueLock);
+}
+
+void deinitChunkRenderer() {
+    for(int lcx = 0; lcx < loadedChunks->rowLen; lcx++) {
+        for(int lcz = 0; lcz < loadedChunks->rowLen; lcz++) {
+            destroyChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, lcz));
+        }
+    }
+    destroyChunkRingBuffer2D(loadedChunks);
+}
+
+RemeshingWorkResult* createRemeshingWorkResult(DynamicArray* vertices, DynamicArray* indices, Chunk* chunk, PTP_WORK work) {
+    RemeshingWorkResult* this = malloc(sizeof(RemeshingWorkResult));
+    if(this == NULL) {
+        throwException("Memory for RemeshingWorkResult couldn't be allocated");
+    }
+    this->indices = indices;
+    this->vertices = vertices;
+    this->chunk = chunk;
+    this->work = work;
+    return this;
+}
+
+void destroyRemeshingWorkResult(RemeshingWorkResult* this) {
+    destroyDynamicArray(this->indices);
+    destroyDynamicArray(this->vertices);
+    WaitForThreadpoolWorkCallbacks(this->work, false);
+    CloseThreadpoolWork(this->work);
+    free(this);
 }
 
 void remeshLoadedChunks() {
+    currentRemeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), pow(loadedChunks->rowLen, 2));
     for(int lcx = 0; lcx < loadedChunks->rowLen; lcx++) {
         for(int lcz = 0; lcz < loadedChunks->rowLen; lcz++) {
-            remeshChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, lcz));
+
+            // Die Argumente für den remeshChunk-Thread werden vorbereitet
+            RemeshingWorkArgs* args = malloc(sizeof(RemeshingWorkArgs));
+            args->chunk = getFromChunkRingBuffer2D(loadedChunks, lcx, lcz);
+            args->resultQueue = resultQueue;
+            args->resultQueueLock = &resultQueueLock;
+
+            // Die Work-Instanz wird erstellt, submittet und in currentRemeshingWorkBatch registriert
+            PTP_WORK remeshingWork = CreateThreadpoolWork(remeshChunk, args, NULL);
+            addToDynamicArray(currentRemeshingWorkBatch, &remeshingWork);
+            SubmitThreadpoolWork(remeshingWork);
+
         }
     }
 }
@@ -102,8 +153,27 @@ bool isChunkInFrustum(Frustum this, float gx, float gy, float gz, float width, f
 }
 
 void renderChunks(Shader shader, mat4 view, mat4 proj) {
-    Frustum frustum;
 
+    // Sind Threads aus dem Work-Batch fertig geworden, werden ihre Ergebnisse übernommen und sie werden aus currentRemeshingWorkBatch entfernt, also soz. "abgehakt"
+    while(true) {
+        // Der Zugriff wird gelockt, um Race-Conditions mit den Worker-Threads zu verhindern
+        EnterCriticalSection(&resultQueueLock);
+        RemeshingWorkResult* result = popFromQueue(resultQueue);
+        LeaveCriticalSection(&resultQueueLock);
+        if(result == NULL) {
+            break;
+        }
+        generateMesh(result->chunk->mesh, result->vertices->ptr, result->vertices->len, result->indices->ptr, result->indices->len);
+        removeByValueFromDynamicArray(currentRemeshingWorkBatch, &result->work);
+        destroyRemeshingWorkResult(result);
+    }
+    // Sind alle Threads des Work-Batches durchgelaufen wird der Batch destroyed und auf NULL gesetzt, damit dynamicallyLoadAndUnloadChunks weiß, dass ein neuer Batch angefangen werden darf
+    if(currentRemeshingWorkBatch != NULL && currentRemeshingWorkBatch->len == 0) {
+        destroyDynamicArray(currentRemeshingWorkBatch);
+        currentRemeshingWorkBatch = NULL;
+    }
+
+    Frustum frustum;
     for(int lcx = 0; lcx < loadedChunks->rowLen; lcx++) {
         for(int lcz = 0; lcz < loadedChunks->rowLen; lcz++) {
 
@@ -147,12 +217,6 @@ void getChunkPos(vec3 pos, vec2 dest) { // Wandelt die g-Koordinaten von cam->po
     glm_vec2_copy(chunkPos, dest);
 }
 
-bool isChunkValid(int lcx, int lcz) {   // Prüft, ob sich die lc-Koordinaten innerhalb der Welt befinden
-    int gcx = loadedChunks->offsetX + lcx;
-    int gcz = loadedChunks->offsetZ + lcz;
-    return (gcx <= WORLD_WIDTH / 2 && gcx >= -WORLD_WIDTH / 2) && (gcz <= WORLD_DEPTH / 2 && gcz >= -WORLD_DEPTH / 2);
-}
-
 void dynamicallyLoadAndUnloadChunks(vec3 lastPlayerPos, vec3 playerPos) {
 
     // Die g-Spielerkoordinaten werden in gc-Koordinaten umgewandelt
@@ -160,64 +224,130 @@ void dynamicallyLoadAndUnloadChunks(vec3 lastPlayerPos, vec3 playerPos) {
     getChunkPos(lastPlayerPos, lastChunkPos);
     getChunkPos(playerPos, chunkPos);
 
-    if(chunkPos[0] > lastChunkPos[0]) { // Hat sich die gcx-Koordinate des Spielers ins positive verändert?
-        loadedChunks->offsetX++;    // Der Ringbuffer wird verschoben
-        for(int lcz = 0; lcz < loadedChunks->rowLen; lcz++) { // Es wird über die zu verändernde Spalte iteriert
-            if(!isChunkValid(loadedChunks->rowLen - 1, lcz)) {  // Kann der zum Laden benötigte Chunk geladen werden?
-                updateChunk(getFromChunkRingBuffer2D(loadedChunks, 0, lcz), voidChunkData, loadedChunks->offsetX + loadedChunks->rowLen - 1, lcz + loadedChunks->offsetZ);  // Nein: Der Chunk wird zu einem VoidChunk
-            } else {
-                updateChunk(getFromChunkRingBuffer2D(loadedChunks, 0, lcz), loadChunkData(loadedChunks->offsetX + loadedChunks->rowLen - 1, lcz + loadedChunks->offsetZ), loadedChunks->offsetX + loadedChunks->rowLen - 1, lcz + loadedChunks->offsetZ);   // Ja: Die Blockdaten des benötigten Chunks werden aus dem ChunkFile geladen und in den Chunk mit seinen neuen gc-Koordinaten eingesetzt
+    // Hat sich die gcx-Koordinate des Spielers ins Positive verändert?
+    if(chunkPos[0] > lastChunkPos[0]) {
+        vec2 lastChunkMovement = {1.0f, 0.0f};
+        bool negated = false;
+        // Befindet sich in queuedChunkMovements eine Bewegung, mit der lastChunkMovement verrechnet werden kann?
+        for(int i = 0; i < queuedChunkMovements->len; i++) {
+            float* chunkMovement = TO_VALUE(vec2) getFromDynamicArray(queuedChunkMovements, i);
+            if(chunkMovement[0] == -1.0f) {
+                // Falls ja: das geschieht
+                removeByIndexFromDynamicArray(queuedChunkMovements, i);
+                negated = true;
+                break;
             }
+        } 
+        // Falls nein: lastChunkMovement wird zur Queue hinzugefügt
+        if(!negated) {
+            addToDynamicArray(queuedChunkMovements, &lastChunkMovement);
         }
-        incrementStartX(loadedChunks);  // Der Pointer, der zum ersten x-Element zeigt wird inkrementiert (-> Ringbuffer wird verschoben)
-        remeshLoadedChunks(); // Die geladenen Chunks werden geremesht, damit die Änderungen in die Meshes übernommen werden
     }
 
     if(chunkPos[0] < lastChunkPos[0]) {
-        loadedChunks->offsetX--;
-        for(int lcz = 0; lcz < loadedChunks->rowLen; lcz++) {
-            if(!isChunkValid(0, lcz)) {
-                updateChunk(getFromChunkRingBuffer2D(loadedChunks, loadedChunks->rowLen - 1, lcz), voidChunkData, loadedChunks->offsetX, lcz + loadedChunks->offsetZ); 
-            } else{
-                updateChunk(getFromChunkRingBuffer2D(loadedChunks, loadedChunks->rowLen - 1, lcz), loadChunkData(loadedChunks->offsetX, lcz + loadedChunks->offsetZ), loadedChunks->offsetX, lcz + loadedChunks->offsetZ); 
+        vec2 lastChunkMovement = {-1.0f, 0.0f};
+        bool negated = false;
+        for(int i = 0; i < queuedChunkMovements->len; i++) {
+            float* chunkMovement = TO_VALUE(vec2) getFromDynamicArray(queuedChunkMovements, i);
+            if(chunkMovement[0] == 1.0f) {
+                removeByIndexFromDynamicArray(queuedChunkMovements, i);
+                negated = true;
+                break;
             }
+        } 
+        if(!negated) {
+            addToDynamicArray(queuedChunkMovements, &lastChunkMovement);
         }
-        decrementStartX(loadedChunks);
-        remeshLoadedChunks();
     }
 
     if(chunkPos[1] > lastChunkPos[1]) {
-        loadedChunks->offsetZ++;
-        for(int lcx = 0; lcx < loadedChunks->rowLen; lcx++) {
-            if(!isChunkValid(lcx, loadedChunks->rowLen - 1)) {
-                updateChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, 0), voidChunkData, lcx + loadedChunks->offsetX, loadedChunks->offsetZ + loadedChunks->rowLen - 1);
-            } else {
-                updateChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, 0), loadChunkData(lcx + loadedChunks->offsetX, loadedChunks->offsetZ + loadedChunks->rowLen - 1), lcx + loadedChunks->offsetX, loadedChunks->offsetZ + loadedChunks->rowLen - 1);
+        vec2 lastChunkMovement = {0.0f, 1.0f};
+        bool negated = false;
+        for(int i = 0; i < queuedChunkMovements->len; i++) {
+            float* chunkMovement = TO_VALUE(vec2) getFromDynamicArray(queuedChunkMovements, i);
+            if(chunkMovement[1] == -1.0f) {
+                removeByIndexFromDynamicArray(queuedChunkMovements, i);
+                negated = true;
+                break;
             }
+        } 
+        if(!negated) {
+            addToDynamicArray(queuedChunkMovements, &lastChunkMovement);
         }
-        incrementStartZ(loadedChunks);
-        remeshLoadedChunks();
     }
 
     if(chunkPos[1] < lastChunkPos[1]) {
-        loadedChunks->offsetZ--;
-        for(int lcx = 0; lcx < loadedChunks->rowLen; lcx++) {
-            if(!isChunkValid(lcx, 0)) {
-                updateChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, loadedChunks->rowLen - 1), voidChunkData, lcx + loadedChunks->offsetX, loadedChunks->offsetZ);
-            } else {
-                updateChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, loadedChunks->rowLen - 1), loadChunkData(lcx + loadedChunks->offsetX, loadedChunks->offsetZ), lcx + loadedChunks->offsetX, loadedChunks->offsetZ);
+        vec2 lastChunkMovement = {0.0f, -1.0f};
+        bool negated = false;
+        for(int i = 0; i < queuedChunkMovements->len; i++) {
+            float* chunkMovement = TO_VALUE(vec2) getFromDynamicArray(queuedChunkMovements, i);
+            if(chunkMovement[1] == 1.0f) {
+                removeByIndexFromDynamicArray(queuedChunkMovements, i);
+                negated = true;
+                break;
             }
+        } 
+        if(!negated) {
+            addToDynamicArray(queuedChunkMovements, &lastChunkMovement);
         }
-        decrementStartZ(loadedChunks);
-        remeshLoadedChunks();
     }
-}
 
-void destroyChunks() {
-    for(int lcx = 0; lcx < loadedChunks->rowLen; lcx++) {
-        for(int lcz = 0; lcz < loadedChunks->rowLen; lcz++) {
-            destroyChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, lcz));
+    // Wurde der Batch abgehandelt, wird das nächste Element aus der movement-Queue zu einem neuen Batch verarbeitet, falls es eines gibt
+    if(currentRemeshingWorkBatch == NULL && queuedChunkMovements->len != 0) {
+
+        float* nextMovement = getFromDynamicArray(queuedChunkMovements, 0);
+        removeByIndexFromDynamicArray(queuedChunkMovements, 0);
+
+        if(nextMovement[0] == 1.0f) { // Hat sich die gcx-Koordinate des Spielers ins positive verändert?
+            loadedChunks->offsetX++;    // Der Ringbuffer wird verschoben
+            for(int lcz = 0; lcz < loadedChunks->rowLen; lcz++) { // Es wird über die zu verändernde Spalte iteriert
+                if(!isLocalChunkValid(loadedChunks->rowLen - 1, lcz)) {  // Kann der zum Laden benötigte Chunk geladen werden?
+                    updateChunk(getFromChunkRingBuffer2D(loadedChunks, 0, lcz), voidChunkData, loadedChunks->offsetX + loadedChunks->rowLen - 1, lcz + loadedChunks->offsetZ);  // Nein: Der Chunk wird zu einem VoidChunk
+                } else {
+                    updateChunk(getFromChunkRingBuffer2D(loadedChunks, 0, lcz), loadChunkData(loadedChunks->offsetX + loadedChunks->rowLen - 1, lcz + loadedChunks->offsetZ), loadedChunks->offsetX + loadedChunks->rowLen - 1, lcz + loadedChunks->offsetZ);   // Ja: Die Blockdaten des benötigten Chunks werden aus dem ChunkFile geladen und in den Chunk mit seinen neuen gc-Koordinaten eingesetzt
+                }
+            }
+            incrementStartX(loadedChunks);  // Der Pointer, der zum ersten x-Element zeigt wird inkrementiert (-> Ringbuffer wird verschoben)
+            remeshLoadedChunks(); // Die geladenen Chunks werden geremesht, damit die Änderungen in die Meshes übernommen werden
+        }
+
+        if(nextMovement[0] == -1.0f) {
+            loadedChunks->offsetX--;
+            for(int lcz = 0; lcz < loadedChunks->rowLen; lcz++) {
+                if(!isLocalChunkValid(0, lcz)) {
+                    updateChunk(getFromChunkRingBuffer2D(loadedChunks, loadedChunks->rowLen - 1, lcz), voidChunkData, loadedChunks->offsetX, lcz + loadedChunks->offsetZ); 
+                } else{
+                    updateChunk(getFromChunkRingBuffer2D(loadedChunks, loadedChunks->rowLen - 1, lcz), loadChunkData(loadedChunks->offsetX, lcz + loadedChunks->offsetZ), loadedChunks->offsetX, lcz + loadedChunks->offsetZ); 
+                }
+            }
+            decrementStartX(loadedChunks);
+            remeshLoadedChunks();
+        }
+
+        if(nextMovement[1] == 1.0f) {
+            loadedChunks->offsetZ++;
+            for(int lcx = 0; lcx < loadedChunks->rowLen; lcx++) {
+                if(!isLocalChunkValid(lcx, loadedChunks->rowLen - 1)) {
+                    updateChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, 0), voidChunkData, lcx + loadedChunks->offsetX, loadedChunks->offsetZ + loadedChunks->rowLen - 1);
+                } else {
+                    updateChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, 0), loadChunkData(lcx + loadedChunks->offsetX, loadedChunks->offsetZ + loadedChunks->rowLen - 1), lcx + loadedChunks->offsetX, loadedChunks->offsetZ + loadedChunks->rowLen - 1);
+                }
+            }
+            incrementStartZ(loadedChunks);
+            remeshLoadedChunks();
+        }
+
+        if(nextMovement[1] == -1.0f) {
+            loadedChunks->offsetZ--;
+            for(int lcx = 0; lcx < loadedChunks->rowLen; lcx++) {
+                if(!isLocalChunkValid(lcx, 0)) {
+                    updateChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, loadedChunks->rowLen - 1), voidChunkData, lcx + loadedChunks->offsetX, loadedChunks->offsetZ);
+                } else {
+                    updateChunk(getFromChunkRingBuffer2D(loadedChunks, lcx, loadedChunks->rowLen - 1), loadChunkData(lcx + loadedChunks->offsetX, loadedChunks->offsetZ), lcx + loadedChunks->offsetX, loadedChunks->offsetZ);
+                }
+            }
+            decrementStartZ(loadedChunks);
+            remeshLoadedChunks();
         }
     }
-    destroyChunkRingBuffer2D(loadedChunks);
 }

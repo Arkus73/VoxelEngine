@@ -5,6 +5,7 @@
 #include "shader.h"
 
 #include <stdint.h>
+#include <windows.h>
 
 typedef enum {
     FRONT = 0,
@@ -24,7 +25,7 @@ typedef struct {
 Chunk* createChunk(uint8_t* blocks, int gcx, int gcz);
 void updateChunk(Chunk* this, uint8_t* blocks, int gcx, int gcz);
 void destroyChunk(Chunk* this);
-void remeshChunk(Chunk* this);  // Updated das Chunk-Mesh aufgrund des block-Arrays
+void __stdcall remeshChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WORK work);  // Updated das Chunk-Mesh aufgrund des block-Arrays
 void renderChunk(Chunk* this, Shader shader);
 
 #endif
