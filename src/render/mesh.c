@@ -13,6 +13,8 @@ Mesh* initMesh() {
         throwException("Memory for Mesh couldn't be allocated");
     }
 
+    this->lenIndices = 0;
+
     // Buffers und VAO werden initialisiert
     glGenVertexArrays(1, &this->VAO);
     glGenBuffers(1, &this->VBO);
@@ -59,6 +61,9 @@ void generateMesh(Mesh* this, float* vertices, int lenVertices, unsigned int* in
 }
 
 void renderMesh(Mesh* this) {
+    if(this->lenIndices <= 0) {
+        return;
+    }
     glBindVertexArray(this->VAO);
     glDrawElements(GL_TRIANGLES, this->lenIndices, GL_UNSIGNED_INT, 0);
 }

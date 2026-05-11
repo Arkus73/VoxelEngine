@@ -17,47 +17,99 @@
 #include "camera.h"
 
 // C includes
+#include <time.h>
+#include <string.h>
+
+// Refactoring:
+
+
+// Progress:
+// TODO Unendliche Welt durch chunkGenerationWorkBatch
+// TODO Spieler-Controller und Physik
+// TODO Speichern von Chunks bei Veränderung (->dirty-Flag)
+
+// Sonstiges:
+// TODO Ein bisschen mit Postprocessing und Shadern herumspielen
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 
+Shader shader;
+
 Camera* cam;
 float lastX = WINDOW_WIDTH / 2, lastY = WINDOW_HEIGHT / 2;
 bool firstMouse = true;
+mat4 proj;
+
+ChunkRenderer* chunkRenderer;
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window, float delta);
+void __destructor deinit(); // Funktion, die alles im Falle der Beendiung des Programms aufräumt
 
 int main(int argc, char** argv) {
 
     // Die Anfangsargumente werden geparst
-    if(argc != 3) {
-        throwException("Not enough arguments were given.");
+    bool wireframe = false;
+    int seed = 0;
+    float frequency = 0.0f;
+    int currentToken = 1;
+    while(currentToken < argc) {
+
+        if(strcmp(argv[currentToken], "--seed") == 0) {
+            currentToken++;
+            if(currentToken >= argc) {
+                throwException("Seed couldn't be parsed");
+            }
+            char* endptr;
+            seed = (int) strtol(argv[currentToken], &endptr, 10);
+            if(endptr == argv[currentToken]) {
+                throwException("Seed couldn't be parsed");
+            }
+        }
+
+        else if(strcmp(argv[currentToken], "--frequency") == 0) {
+            currentToken++;
+            if(currentToken >= argc) {
+                throwException("Frequency couldn't be parsed");
+            }
+            char* endptr;
+            frequency = (float) strtof(argv[currentToken], &endptr);
+            if(endptr == argv[currentToken]) {
+                throwException("Frequency couldn't be parsed");
+            }
+        }
+
+        else if(strcmp(argv[currentToken], "--wireframe") == 0) {
+            wireframe = true;
+        }
+
+        else{
+            throwException("Flag not recognised");
+        }
+
+        currentToken++;
     }
-    char* endptr;
-    int seed = strtol(argv[1], &endptr, 10);
-    if(endptr == argv[1]) {
-        throwException("Seed couldn't be parsed");
-    }
-    float frequency = strtof(argv[2], &endptr);
-    if(endptr == argv[2]) {
-        throwException("Frequency couldn't be parsed");
-    }
+
+    // Wurde ein Wert nicht in den Argumenten gesetzt, wird er gedefaultet
+    seed = (seed == 0) ? (int) time(NULL) : seed;
+    frequency = (frequency == 0.0f) ? 0.8f : frequency;
 
     // Das Setup findet statt
     glfwInit();
     GLFWwindow* window = InitAndCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Minecraft Clone");
-    glfwSetFramebufferSizeCallback(window, default_framebuffer_size_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
 
     glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     // Die Shader werden geladen
-    Shader shader = createShader("../src/shaders/vertex.glsl", "../src/shaders/fragment.glsl");
+    shader = createShader("../src/shaders/vertex.glsl", "../src/shaders/fragment.glsl");
     use(shader);
 
     // Die nötigen Matrizen werden initialisiert und dem Vertex-Shader übergeben
-    mat4 view, proj;
+    mat4 view;
     glm_mat4_identity(view);
     glm_perspective(glm_rad(FOV), (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT, 0.1f, (RENDER_DISTANCE + 5) * CHUNK_WIDTH * sqrt(2), proj);
 
@@ -73,14 +125,16 @@ int main(int argc, char** argv) {
     // Alles zur Welt und Rendering benötigtes wird initialisiert
     initBlocks();
     generateWorld(seed, frequency);
-    initChunkRenderer();
-    remeshLoadedChunks();
+    chunkRenderer = initChunkRenderer();
+    remeshLoadedChunks(chunkRenderer);
 
     glEnable(GL_CULL_FACE); // Face-Culling wird aktiviert, wodurch Faces, die vom Spieler wegzeigen nicht gerendert werden, was zu deutlich besserer Perfomance führt
 
     glEnable(GL_DEPTH_TEST);    // Depth-Test wird angeschaltet, um zu gewährleisten, dass die 3D-Drawing-Order eingehalten wird
 
-    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);  // Wireframe-Modus falls nötig
+    if(wireframe) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);    // Cursor wird im Fenster gecatched
 
@@ -108,7 +162,7 @@ int main(int argc, char** argv) {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, blockAtlas);
 
-        renderChunks(shader, view, proj);
+        renderChunks(chunkRenderer, shader, view, proj);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -116,12 +170,7 @@ int main(int argc, char** argv) {
     }
 
     printf("Mittlere FPS: %f\n", frames / glfwGetTime());
-    // Alles wird aufgeräumt
-    system("del ..\\chunks\\*.bin");
-    deinitChunkRenderer();
-    destroyBlocks();
-    glfwTerminate();
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 void processInput(GLFWwindow* window, float delta) {
@@ -133,10 +182,7 @@ void processInput(GLFWwindow* window, float delta) {
     vec3 lastPlayerPos;
     glm_vec3_copy(cam->pos, lastPlayerPos);
     processCameraKeyboardInput(window, cam, delta); // Spieler-Input wird gehandelt
-    // Hat sich der Chunk des Spielers geändert, werden die geladenen Chunks geupdated
-    if(floor(lastPlayerPos[0] / CHUNK_WIDTH) != floor(cam->pos[0] / CHUNK_WIDTH) || floor(lastPlayerPos[2] / CHUNK_DEPTH) != floor(cam->pos[2] / CHUNK_DEPTH)) {
-        dynamicallyLoadAndUnloadChunks(lastPlayerPos, cam->pos);
-    }
+    dynamicallyLoadAndUnloadChunks(chunkRenderer, lastPlayerPos, cam->pos);    // Die geladenen Chunks werden geupdatet
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
@@ -154,4 +200,19 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     lastX = xpos;
     lastY = ypos;
 
+}
+
+void __destructor deinit() {
+    // Alles wird aufgeräumt
+    system("del ..\\chunks\\*.bin");
+    deinitChunkRenderer(chunkRenderer);
+    destroyBlocks();
+    destroyCamera(cam);
+    glfwTerminate();
+}
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    glViewport(0, 0, width, height);
+    glm_perspective(glm_rad(FOV), (float) width / (float) height, 0.1f, (RENDER_DISTANCE + 5) * CHUNK_WIDTH * sqrt(2), proj);
+    setMatrix(shader, "proj", proj);
 }

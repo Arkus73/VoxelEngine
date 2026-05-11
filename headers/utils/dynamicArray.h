@@ -15,11 +15,17 @@ typedef struct {
 
 void destroyDynamicArray(DynamicArray* this);
 DynamicArray* createDynamicArray(size_t elementSize, int startCapacity);
-void endInitDynamicArray(DynamicArray* this);
+
 void addToDynamicArray(DynamicArray* this, void* item);
+void addFloatToDynamicArray(DynamicArray* this, float item);
+void addIntToDynamicArray(DynamicArray* this, int item);
+void addUnsignedIntToDynamicArray(DynamicArray* this, unsigned int item);
+
 void removeByIndexFromDynamicArray(DynamicArray* this, int index);
 void removeByValueFromDynamicArray(DynamicArray* this, void* value);
+
 void* getFromDynamicArray(DynamicArray* this, int index);
+
 bool doesDynamicArrayContain(DynamicArray* this, void* value);
 
 #endif

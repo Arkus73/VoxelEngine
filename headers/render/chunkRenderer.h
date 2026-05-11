@@ -17,18 +17,26 @@ typedef struct {
 } RemeshingWorkResult;
 
 typedef struct {
+    ChunkRingBuffer2D* loadedChunks;
+    uint8_t* voidChunkData;
+    Queue* resultQueue;
+    CRITICAL_SECTION resultQueueLock;
+    DynamicArray* currentRemeshingWorkBatch;
+    DynamicArray* queuedChunkMovements;
+} ChunkRenderer;
+
+typedef struct {
     Chunk* chunk;
     Queue* resultQueue;
     CRITICAL_SECTION* resultQueueLock;
+    ChunkRingBuffer2D* loadedChunks;
 } RemeshingWorkArgs;
 
-extern ChunkRingBuffer2D* loadedChunks;
-
-void initChunkRenderer();
+ChunkRenderer* initChunkRenderer();
+void deinitChunkRenderer(ChunkRenderer* chunkRenderer);
 RemeshingWorkResult* createRemeshingWorkResult(DynamicArray* vertices, DynamicArray* indices, Chunk* chunk, PTP_WORK work);
-void remeshLoadedChunks();
-void renderChunks(Shader shader, mat4 view, mat4 proj);
-void dynamicallyLoadAndUnloadChunks(vec3 lastPlayerPos, vec3 playerPos);
-void deinitChunkRenderer();
+void remeshLoadedChunks(ChunkRenderer* chunkRenderer);
+void renderChunks(ChunkRenderer* chunkRenderer, Shader shader, mat4 view, mat4 proj);
+void dynamicallyLoadAndUnloadChunks(ChunkRenderer* chunkRenderer, vec3 lastPlayerPos, vec3 playerPos);
 
 #endif

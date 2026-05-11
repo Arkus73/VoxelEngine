@@ -27,7 +27,7 @@ DynamicArray* createDynamicArray(size_t elementSize, int startCapacity) {
     return this;
 }
 
-void addToDynamicArray(DynamicArray* this, void* item) {
+void incrementLen(DynamicArray* this) {
     this->len++;
     if(this->len > this->capacity) {
         this->capacity *= 2;
@@ -37,8 +37,39 @@ void addToDynamicArray(DynamicArray* this, void* item) {
         }
         this->ptr = newPtr;
     }
+}
+
+void addToDynamicArray(DynamicArray* this, void* item) {
+    incrementLen(this);
     memcpy(ADDRESS_AT_INDEX(this, this->len - 1), item, this->elementSize);
 } 
+
+void addFloatToDynamicArray(DynamicArray* this, float item) {
+    incrementLen(this);
+    if(this->elementSize == sizeof(float)) {
+        memcpy(ADDRESS_AT_INDEX(this, this->len - 1), &item, this->elementSize);
+    } else {
+        throwException("Tried to add a float to Non-Float-DynamicArray");
+    }
+}
+
+void addIntToDynamicArray(DynamicArray* this, int item) {
+    incrementLen(this);
+    if(this->elementSize == sizeof(int)) {
+        memcpy(ADDRESS_AT_INDEX(this, this->len - 1), &item, this->elementSize);
+    } else {
+        throwException("Tried to add an int to Non-Int-DynamicArray");
+    }
+}
+
+void addUnsignedIntToDynamicArray(DynamicArray* this, unsigned int item) {
+    incrementLen(this);
+    if(this->elementSize == sizeof(unsigned int)) {
+        memcpy(ADDRESS_AT_INDEX(this, this->len - 1), &item, this->elementSize);
+    } else {
+        throwException("Tried to add an unsigned int to Non-UnsignedInt-DynamicArray");
+    }
+}
 
 void removeByIndexFromDynamicArray(DynamicArray* this, int index) {
     if(index < 0 || index >= this->len) {

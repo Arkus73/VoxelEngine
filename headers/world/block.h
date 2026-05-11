@@ -5,14 +5,6 @@
 
 typedef float texCoord[2];
 
-// Block-IDs, die zur eindeutigen Identifizierung eines Blocks nötig sind
-typedef enum {
-    AIR,
-    GRASS,
-    DIRT,
-    STONE
-} BlockId;
-
 typedef struct {
 
     // texCoords, die angeben welche Subtextur des Texture Atlas für welche Seite genutzt werden soll
@@ -30,8 +22,9 @@ typedef struct {
 #define ATLAS_HEIGHT 600.0f
 #define SUBTEXTURE_WIDTH 37.5f
 #define SUBTEXTURE_HEIGHT 37.5f
-#define RELATIVE_SUBTEXTURE_WIDTH SUBTEXTURE_WIDTH / ATLAS_WIDTH
-#define RELATIVE_SUBTEXTURE_HEIGHT SUBTEXTURE_HEIGHT / ATLAS_HEIGHT
+#define EPSILON 0.001f  // Korrigierender Summand
+#define RELATIVE_SUBTEXTURE_WIDTH SUBTEXTURE_WIDTH / ATLAS_WIDTH - EPSILON
+#define RELATIVE_SUBTEXTURE_HEIGHT SUBTEXTURE_HEIGHT / ATLAS_HEIGHT - EPSILON
 
 // Globale Blöcke
 extern DynamicArray* blockRegistry;

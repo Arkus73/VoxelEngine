@@ -6,6 +6,7 @@
 typedef struct {
     unsigned int ID;
 } Shader;
+
 Shader createShader(const char* vertexDir, const char* fragmentDir);
 void use(Shader shader);
 void setInt(Shader shader, const char* name, int value);

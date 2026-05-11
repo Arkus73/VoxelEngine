@@ -7,11 +7,17 @@
 #include <stdint.h>
 #include <string.h>
 
+void closeFile(FILE** file) {
+    if(*file != NULL) {
+        fclose(*file);
+    }
+}
+
 void saveChunk(uint8_t* blocks, int gcx, int gcz) {
     char filename[256];     // Dateiname wird generiert
     snprintf(filename, sizeof(filename), "../chunks/chunk_%d_%d.bin", gcx, gcz);    
 
-    FILE* file = fopen(filename, "wb");     // Datei wird geöffnet
+    __cleanup(closeFile) FILE* file = fopen(filename, "wb");     // Datei wird geöffnet
     if (file == NULL) {
         throwException("Chunkfile couldn't be opened for writing");
     }
@@ -20,15 +26,13 @@ void saveChunk(uint8_t* blocks, int gcx, int gcz) {
     if (fwrite(blocks, 1, size, file) != size) {    // Datei wird beschrieben.
         throwException("Could not write full chunk");
     }
-
-    fclose(file);   // Datei wird geschlossen
 }
 
 uint8_t* loadChunkData(int gcx, int gcz) {
     char filename[256];     // Dateiname wird generiert
     snprintf(filename, sizeof(filename), "../chunks/chunk_%d_%d.bin", gcx, gcz);
 
-    FILE* file = fopen(filename, "rb");     // Datei wird geöffnet
+    __cleanup(closeFile) FILE* file = fopen(filename, "rb");     // Datei wird geöffnet
     if (file == NULL) {
         throwException("Chunkfile couldn't be opened for reading");
     }
@@ -44,7 +48,6 @@ uint8_t* loadChunkData(int gcx, int gcz) {
         throwException("Chunk file corrupted or incomplete");
     }
 
-    fclose(file);   // Datei wird geschlossen und der Buffer ausgegeben
     return buffer;
 }
 

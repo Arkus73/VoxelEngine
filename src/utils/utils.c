@@ -9,6 +9,7 @@
 #include "stb_image.h"
 #include "chunkRenderer.h"
 #include "consts.h"
+#include "ringBuffer.h"
 
 GLFWwindow* InitAndCreateWindow(int windowWidth, int windowHeight, const char* title) {
 
@@ -34,13 +35,12 @@ void default_framebuffer_size_callback(GLFWwindow* window, int width, int height
     glViewport(0, 0, width, height);    // Viewport wird an neue Fenstergröße angepasst
 }
 
-void __MINGW_ATTRIB_NORETURN throwException(char* msg) {
-    printf("%s\n", msg);
-    glfwTerminate();
+void __noreturn throwException(char* msg) {
+    perror(msg);
     exit(EXIT_FAILURE);
 }
 
-float clamp(float value, float min, float max) {
+float __const clamp(float value, float min, float max) {
     if(value < min) {
         return min;
     } else if(value > max) {
@@ -86,11 +86,11 @@ unsigned int createTexture(const char* dir, int filter) {
     return texture;
 }
 
-int modulo(int a, int b) {
+int __const modulo(int a, int b) {
     return (a % b + b) % b;
 }
 
-bool isLocalChunkValid(int lcx, int lcz){   // Prüft, ob sich die lc-Koordinaten innerhalb der Welt befinden
+bool isLocalChunkValid(ChunkRingBuffer2D* loadedChunks, int lcx, int lcz){   // Prüft, ob sich die lc-Koordinaten innerhalb der Welt befinden
     int gcx = loadedChunks->offsetX + lcx;
     int gcz = loadedChunks->offsetZ + lcz;
     return (gcx <= WORLD_WIDTH / 2 && gcx >= -WORLD_WIDTH / 2) && (gcz <= WORLD_DEPTH / 2 && gcz >= -WORLD_DEPTH / 2);

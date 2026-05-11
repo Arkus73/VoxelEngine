@@ -49,15 +49,15 @@ void updateChunk(Chunk* this, uint8_t* blocks, int gcx, int gcz) {
     this->z = gcz;
 }
 
-uint8_t getBlock(int gx, int gy, int gz);
+uint8_t getBlock(ChunkRingBuffer2D* loadedChunks, int gx, int gy, int gz);
 void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicArray* indices, int bx, int by, int bz);
 void addIndicesToChunkMesh(DynamicArray* indices, unsigned int startIndex);
 void addVertexToChunkMesh(Face face, DynamicArray* vertices, float bx, float by, float bz, float texCoordX, float texCoordY);
 
 void __stdcall remeshChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WORK work) {
 
-    DynamicArray* vertices = createDynamicArray(sizeof(float), 8e3);
-    DynamicArray* indices = createDynamicArray(sizeof(unsigned int), 2e3);
+    DynamicArray* vertices = createDynamicArray(sizeof(float), 8000);
+    DynamicArray* indices = createDynamicArray(sizeof(unsigned int), 2000);
 
     RemeshingWorkArgs* args = (RemeshingWorkArgs*) param;
     Chunk* this = args->chunk;
@@ -79,22 +79,22 @@ void __stdcall remeshChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WORK
                 int gz = this->z * CHUNK_DEPTH + bz;
                 
                 // Falls Face sichtbar ist (an Luft grenzt), wird es dem Chunk-Mesh hinzugefügt
-                if(getBlock(gx, gy, gz + 1) == BLOCK_AIR) {
+                if(getBlock(args->loadedChunks, gx, gy, gz + 1) == BLOCK_AIR) {
                     addFaceToChunkMesh(currentBlock, FRONT, vertices, indices, bx, by, bz);
                 }
-                if(getBlock(gx, gy, gz - 1) == BLOCK_AIR) {
+                if(getBlock(args->loadedChunks, gx, gy, gz - 1) == BLOCK_AIR) {
                     addFaceToChunkMesh(currentBlock, BACK, vertices, indices, bx, by, bz);
                 }
-                if(getBlock(gx, gy + 1, gz) == BLOCK_AIR) {
+                if(getBlock(args->loadedChunks, gx, gy + 1, gz) == BLOCK_AIR) {
                     addFaceToChunkMesh(currentBlock, TOP, vertices, indices, bx, by, bz);
                 }
-                if(getBlock(gx, gy - 1, gz) == BLOCK_AIR) {
+                if(getBlock(args->loadedChunks, gx, gy - 1, gz) == BLOCK_AIR) {
                     addFaceToChunkMesh(currentBlock, BOTTOM, vertices, indices, bx, by, bz);
                 }
-                if(getBlock(gx + 1, gy, gz) == BLOCK_AIR) {
+                if(getBlock(args->loadedChunks, gx + 1, gy, gz) == BLOCK_AIR) {
                     addFaceToChunkMesh(currentBlock, RIGHT, vertices, indices, bx, by, bz);
                 }
-                if(getBlock(gx - 1, gy, gz) == BLOCK_AIR) {
+                if(getBlock(args->loadedChunks, gx - 1, gy, gz) == BLOCK_AIR) {
                     addFaceToChunkMesh(currentBlock, LEFT, vertices, indices, bx, by, bz);
                 }
 
@@ -108,7 +108,7 @@ void __stdcall remeshChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WORK
     EnterCriticalSection(args->resultQueueLock);
     enqueueToQueue(args->resultQueue, result);
     LeaveCriticalSection(args->resultQueueLock);
-    free(param);
+    free(args);
 }
 
 int floorDiv(int a, int b) {
@@ -117,7 +117,7 @@ int floorDiv(int a, int b) {
     return r;
 }
 
-uint8_t getBlock(int gx, int gy, int gz) {
+uint8_t getBlock(ChunkRingBuffer2D* loadedChunks, int gx, int gy, int gz) {
 
     // Die globalen Koordinaten werden erst in gc, dann in lc-Koordinaten umgewandelt
     int lcx = floorDiv(gx, CHUNK_WIDTH) - loadedChunks->offsetX;
@@ -135,7 +135,7 @@ uint8_t getBlock(int gx, int gy, int gz) {
         return BLOCK_AIR;
     }
 
-    // Ansonsten wird der gesuchte Block ausgegebenW
+    // Ansonsten wird der gesuchte Block ausgegeben
     return chunk->BLOCK_AT(bx, gy, bz);
 }
 
@@ -213,18 +213,15 @@ void addFaceToChunkMesh(Block block, Face face, DynamicArray* vertices, DynamicA
 
 void addIndicesToChunkMesh(DynamicArray* indices, unsigned int startIndex) {
     unsigned int value = startIndex;
-    addToDynamicArray(indices, &value);
-    value++;
-    addToDynamicArray(indices, &value);
-    value++;
-    addToDynamicArray(indices, &value);
+    addUnsignedIntToDynamicArray(indices, value++);
+    addUnsignedIntToDynamicArray(indices, value++);
+    addUnsignedIntToDynamicArray(indices, value);
 
     value = startIndex;
-    addToDynamicArray(indices, &value);
+    addUnsignedIntToDynamicArray(indices, value);
     value += 2;
-    addToDynamicArray(indices, &value);
-    value++;
-    addToDynamicArray(indices, &value);
+    addUnsignedIntToDynamicArray(indices, value++);
+    addUnsignedIntToDynamicArray(indices, value);
 }
 
 void addVertexToChunkMesh(Face face, DynamicArray* vertices, float bx, float by, float bz, float texCoordX, float texCoordY) {
@@ -234,68 +231,42 @@ void addVertexToChunkMesh(Face face, DynamicArray* vertices, float bx, float by,
     addToDynamicArray(vertices, &by);
     addToDynamicArray(vertices, &bz);
 
-    float normalComponent;
-
     switch(face) {
 
         case FRONT:
-            // aNormal-Attribut des Vertex wird gesetzt
-            normalComponent = 0.0f;   // x-Komponente der Normale
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = 0.0f;   // y-Komponente der Normale
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = 1.0f;   // z-Komponente der Normale
-            addToDynamicArray(vertices, &normalComponent);
+            addFloatToDynamicArray(vertices, 0.0f); // x-Komponente der Normale
+            addFloatToDynamicArray(vertices, 0.0f); // y-Komponente der Normale
+            addFloatToDynamicArray(vertices, 1.0f); // z-Komponente der Normale
             break;
 
         case BACK:
-            // aNormal-Attribut des Vertex wird gesetzt
-            normalComponent = 0.0f;
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = 0.0f;
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = -1.0f;
-            addToDynamicArray(vertices, &normalComponent);
+            addFloatToDynamicArray(vertices, 0.0f);
+            addFloatToDynamicArray(vertices, 0.0f);
+            addFloatToDynamicArray(vertices, -1.0f);
             break;
 
         case TOP:
-            // aNormal-Attribut des Vertex wird gesetzt
-            normalComponent = 0.0f;
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = 1.0f;
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = 0.0f;
-            addToDynamicArray(vertices, &normalComponent);
+            addFloatToDynamicArray(vertices, 0.0f);
+            addFloatToDynamicArray(vertices, 1.0f);
+            addFloatToDynamicArray(vertices, 0.0f);
             break;
 
         case BOTTOM:
-            // aNormal-Attribut des Vertex wird gesetzt
-            normalComponent = 0.0f;
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = -1.0f;
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = 0.0f;
-            addToDynamicArray(vertices, &normalComponent);
+            addFloatToDynamicArray(vertices, 0.0f);
+            addFloatToDynamicArray(vertices, -1.0f);
+            addFloatToDynamicArray(vertices, 0.0f);
             break;
 
         case RIGHT:
-            // aNormal-Attribut des Vertex wird gesetzt
-            normalComponent = 1.0f;
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = 0.0f;
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = 0.0f;
-            addToDynamicArray(vertices, &normalComponent);
+            addFloatToDynamicArray(vertices, 1.0f);
+            addFloatToDynamicArray(vertices, 0.0f);
+            addFloatToDynamicArray(vertices, 0.0f);
             break;
 
         case LEFT:
-            // aNormal-Attribut des Vertex wird gesetzt
-            normalComponent = -1.0f;
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = 0.0f;
-            addToDynamicArray(vertices, &normalComponent);
-            normalComponent = 0.0f;
-            addToDynamicArray(vertices, &normalComponent);
+            addFloatToDynamicArray(vertices, -1.0f);
+            addFloatToDynamicArray(vertices, 0.0f);
+            addFloatToDynamicArray(vertices, 0.0f);
             break;
     }
 
