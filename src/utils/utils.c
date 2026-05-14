@@ -36,7 +36,7 @@ void default_framebuffer_size_callback(GLFWwindow* window, int width, int height
 }
 
 void __noreturn throwException(char* msg) {
-    perror(msg);
+    printf("%s\n", msg);
     exit(EXIT_FAILURE);
 }
 

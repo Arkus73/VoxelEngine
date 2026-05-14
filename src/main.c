@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
     // Die nötigen Matrizen werden initialisiert und dem Vertex-Shader übergeben
     mat4 view;
     glm_mat4_identity(view);
-    glm_perspective(glm_rad(FOV), (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT, 0.1f, (RENDER_DISTANCE + 5) * CHUNK_WIDTH * sqrt(2), proj);
+    glm_perspective(glm_rad(FOV), (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT, 0.1f, 1000.0f, proj);
 
     setMatrix(shader, "proj", proj);
 
@@ -169,7 +169,7 @@ int main(int argc, char** argv) {
 
     }
 
-    printf("Mittlere FPS: %f\n", frames / glfwGetTime());
+    printf("Average FPS: %.2f", frames / glfwGetTime());
     return EXIT_SUCCESS;
 }
 
@@ -213,6 +213,6 @@ void __destructor deinit() {
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
-    glm_perspective(glm_rad(FOV), (float) width / (float) height, 0.1f, (RENDER_DISTANCE + 5) * CHUNK_WIDTH * sqrt(2), proj);
+    glm_perspective(glm_rad(FOV), (float) width / (float) height, 0.1f, 1000.0f, proj);
     setMatrix(shader, "proj", proj);
 }
