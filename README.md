@@ -16,7 +16,8 @@ To run this application download the latest zip from the releases, extract all t
 When running the application various flags can be provided, such as:
 - `--seed <value>` Specifies a seed to use for world generation. This defaults to the current time.
 - `--frequency <value>` Specifies a frequency for the noise function. This defaults to 0.8.
-- `--wireframe` Enables wireframe rendering mode. Mostly for debugging purposes
+- `--wireframe` Enables wireframe rendering mode. Mostly for debugging purposes.
+- `--gradientCount <value>` Specifies a number of gradients to use for the noise function.
 
 *Examples*:
 ```powershell 
@@ -26,12 +27,11 @@ When running the application various flags can be provided, such as:
 ```
 
 ## Current Features
-- A procedurally generated, finite world
+- A procedurally generated, infinite world
 - A first person camera with a free movement
 - The ability to customise the generation process a bit and get a look behind the scenes with a wireframe-mode
 
 ## Plans
-- An infinite World
 - A proper controller with physics and the ability to break and place blocks
 - Lighting and Shadows
 

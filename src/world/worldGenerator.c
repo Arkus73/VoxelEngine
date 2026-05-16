@@ -4,6 +4,9 @@
 #include "block.h"
 #include "utils.h"
 #include "consts.h"
+#include "chunkRenderer.h"
+#include "queue.h"
+#include "dynamicArray.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -12,17 +15,12 @@
 #include <string.h>
 #include <windows.h>
 
-#define INDEX3D(x, y, z) (x) * CHUNK_HEIGHT * CHUNK_DEPTH + (y) * CHUNK_DEPTH + (z)
-#define GRADIENT_COUNT 8
+#define INDEX3D(gcx, y, gcz) ((gcx) * CHUNK_HEIGHT * CHUNK_DEPTH + (y) * CHUNK_DEPTH + (gcz))
 
-vec2 gradients[GRADIENT_COUNT];
-float frequency;
-int seed;
-
-uint32_t hash(float x, float y) {
+uint32_t hash(int seed, float gcx, float y) {
     uint32_t h = seed;
 
-    h ^= (uint32_t)x * 0x27d4eb2d;
+    h ^= (uint32_t)gcx * 0x27d4eb2d;
     h ^= (uint32_t)y * 0x85ebca6b;
 
     h ^= h >> 15;
@@ -43,7 +41,7 @@ float getKernel(vec2 dir, vec2 grad) {
 #define F2 ((sqrt(3.0) - 1.0f) / 2.0f)
 #define G2 ((3.0f - sqrt(3.0)) / 6.0f)
 
-float generateSimplexNoise(vec2 point) {
+float generateSimplexNoise(WorldGenerator* worldGenerator, vec2 point) {
 
     // Simplex-Zelle des Punkts wird bestimmt
     float s = (point[0] + point[1]) * F2;
@@ -67,9 +65,9 @@ float generateSimplexNoise(vec2 point) {
 
     // Gradienten werden aufgrund von Hash ausgewählt
     vec2 grad0, grad1, grad2;
-    glm_vec2_copy(gradients[hash(cell[0], cell[1]) & (GRADIENT_COUNT - 1)], grad0);
-    glm_vec2_copy(gradients[hash(cell[0] + i1, cell[1] + j1) & (GRADIENT_COUNT - 1)], grad1);
-    glm_vec2_copy(gradients[hash(cell[0] + 1, cell[1] + 1) & (GRADIENT_COUNT - 1)], grad2);
+    glm_vec2_copy(worldGenerator->gradients[modulo(hash(worldGenerator->seed, cell[0], cell[1]), worldGenerator->gradientCount)], grad0);
+    glm_vec2_copy(worldGenerator->gradients[modulo(hash(worldGenerator->seed, cell[0] + i1, cell[1] + j1), worldGenerator->gradientCount)], grad1);
+    glm_vec2_copy(worldGenerator->gradients[modulo(hash(worldGenerator->seed, cell[0] + 1, cell[1] + 1), worldGenerator->gradientCount)], grad2);
 
     return 100.0f * (getKernel(dir0, grad0) + getKernel(dir1, grad1) + getKernel(dir2, grad2));
 }
@@ -77,9 +75,7 @@ float generateSimplexNoise(vec2 point) {
 // Frequency beschreibt, wie schnell die Noise-Werte von Punkt zu Punkt variieren. Je höher, desto chaotischer. Je niedriger, desto flacher.
 void __stdcall generateChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WORK work) {
 
-    char* paramBytes = (char*) param;
-    int gcx = *(int*) paramBytes;
-    int gcz = *(int*) (paramBytes + sizeof(int));
+    ChunkGenerationWorkArgs* args = (ChunkGenerationWorkArgs*) param;
 
     // Platz für die Blöcke des Chunks wird allokiert
     uint8_t* blocks = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t));
@@ -87,12 +83,12 @@ void __stdcall generateChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WO
         throwException("Memory for Blocks couldn't be allocated");
     }
 
-    for(int gx = gcx * CHUNK_WIDTH; gx < (gcx + 1) * CHUNK_WIDTH; gx++) {
+    for(int gx = args->chunk->gcx * CHUNK_WIDTH; gx < (args->chunk->gcx + 1) * CHUNK_WIDTH; gx++) {
         int bx = modulo(gx, CHUNK_WIDTH);
-        for(int gz = gcz * CHUNK_DEPTH; gz < (gcz + 1) * CHUNK_DEPTH; gz++) {
+        for(int gz = args->chunk->gcz * CHUNK_DEPTH; gz < (args->chunk->gcz + 1) * CHUNK_DEPTH; gz++) {
 
             // Das Noise für den globalen Punkt wird erzeugt
-            float noise = generateSimplexNoise((vec2) {(float) gx * frequency / 100.0f, (float) gz * frequency / 100.0f});
+            float noise = generateSimplexNoise(args->worldGenerator, (vec2) {(float) gx * args->worldGenerator->frequency / 100.0f, (float) gz * args->worldGenerator->frequency / 100.0f});
             int height = (int) floor((CHUNK_HEIGHT / 4 * noise + 3 * CHUNK_HEIGHT / 4) - 1);
             if(height < 0) {
                 height = 0;
@@ -116,54 +112,39 @@ void __stdcall generateChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WO
         }
     }
 
-    saveChunk(blocks, gcx, gcz);
-    free(blocks);
+    updateChunkBlocks(args->chunk, blocks);
+    ChunkGenerationWorkResult* result = createChunkGenerationWorkResult(work);
+    EnterCriticalSection(args->resultQueueLock);
+    enqueueToQueue(args->resultQueue, result);
+    LeaveCriticalSection(args->resultQueueLock);
+    free(args);
 }
 
-void generateWorld(int paramSeed, float paramFrequency) {
+WorldGenerator* initWorldGenerator(int gradientCount, int seed, float frequency) {
 
-    // Die möglichen Gradienten werden generiert (GRADIENT_COUNT muss immer eine Zweierpotenz sein, da sonst hash & (GRADIENT_COUNT - 1) statt hash % GRADIENT_COUNT nicht klappt)
-    for(int i = 1; i < GRADIENT_COUNT + 1; i++) {
-        vec2 gradient = {cos(2.0 * M_PI * GRADIENT_COUNT / i), sin(2.0 * M_PI * GRADIENT_COUNT / i)};
-        memcpy(gradients[i - 1], gradient, sizeof(vec2));
+    WorldGenerator* this = malloc(sizeof(WorldGenerator));
+    if(this == NULL) {
+        throwException("Memory for worldGenerator couldn't be allocated");
     }
 
-    seed = paramSeed;
-    frequency = paramFrequency;
-
-    system("if not exist \"..\\chunks\" mkdir \"..\\chunks\"");
-
-    DynamicArray* works = createDynamicArray(sizeof(PTP_WORK), (WORLD_WIDTH + 1) * (WORLD_DEPTH + 1));
-    DynamicArray* workArgs = createDynamicArray(sizeof(void*), (WORLD_WIDTH + 1) * (WORLD_DEPTH + 1));
-    for(int gcx = -WORLD_WIDTH / 2; gcx < WORLD_WIDTH / 2 + 1; gcx++) {
-        for(int gcz = -WORLD_DEPTH / 2; gcz < WORLD_DEPTH / 2 + 1; gcz++) {
-
-            // Die Aufgabe, den Chunk bei {gcx, gcz} zu generieren, wird in den Thread-Pool gepackt und in works registriert
-            char* args = malloc(2 * sizeof(int));
-            if(args == NULL) {
-                throwException("Memory for ChunkGeneration-Thread couldn't be allocated");
-            }
-
-            memcpy(args, &gcx, sizeof(int));
-            memcpy(args + sizeof(int), &gcz, sizeof(int));
-
-            PTP_WORK work = CreateThreadpoolWork(generateChunk, args, NULL);
-            if(work == NULL) {
-                throwException("Couldn't create Chunk Generation Work");
-            }
-            SubmitThreadpoolWork(work);
-            addToDynamicArray(works, &work);
-            addToDynamicArray(workArgs, &args);
-
-        }
+    this->gradientCount = gradientCount;
+    this->seed = seed;
+    this->frequency = frequency;
+    this->gradients = malloc(sizeof(vec2) * gradientCount);
+    if(this->gradients == NULL) {
+        throwException("Memory for gradients couldn't be allocated");
     }
 
-    // Es wird nacheinander auf die Beendigung jeder Aufgabe gewartet und sie wird destroyed
-    for(int i = 0; i < works->len; i++) {
-        WaitForThreadpoolWorkCallbacks(TO_VALUE(PTP_WORK)getFromDynamicArray(works, i), false);
-        CloseThreadpoolWork(TO_VALUE(PTP_WORK)getFromDynamicArray(works, i));
-        free(TO_VALUE(void*) getFromDynamicArray(workArgs, i));
+    // Die möglichen Gradienten werden generiert
+    for(int i = 1; i < this->gradientCount + 1; i++) {
+        vec2 gradient = {cos(2.0 * M_PI * this->gradientCount / i), sin(2.0 * M_PI * this->gradientCount / i)};
+        memcpy(&this->gradients[i - 1], gradient, sizeof(vec2));
     }
-    destroyDynamicArray(works);
-    destroyDynamicArray(workArgs);
+
+    return this;
+}
+
+void deinitWorldGenerator(WorldGenerator* this) {
+    free(this->gradients);
+    free(this);
 }

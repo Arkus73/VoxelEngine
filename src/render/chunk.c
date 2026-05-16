@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define BLOCK_AT(bx, by, bz) blocks[(bx) * CHUNK_HEIGHT * CHUNK_DEPTH + (by) * CHUNK_DEPTH + (bz)]    // bx, by und bz in Klammern, damit Rechenreihenfolge auch bspw. bei x = x + 1 eingehalten wird
+#define BLOCK_AT(bx, by, bz) blocks[(bx) * CHUNK_HEIGHT * CHUNK_DEPTH + (by) * CHUNK_DEPTH + (bz)]    // bx, by und bz in Klammern, damit Rechenreihenfolge auch bspw. bei gcx = gcx + 1 eingehalten wird
 
 Chunk* createChunk(uint8_t* blocks, int gcx, int gcz) {
 
@@ -22,8 +22,8 @@ Chunk* createChunk(uint8_t* blocks, int gcx, int gcz) {
         throwException("Memory couldn't be allocated");
     }
     
-    this->x = gcx;
-    this->z = gcz;
+    this->gcx = gcx;
+    this->gcz = gcz;
 
     this->blocks = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t));
     if(this->blocks == NULL) {
@@ -43,10 +43,14 @@ void destroyChunk(Chunk* this) {
     free(this);
 }
 
-void updateChunk(Chunk* this, uint8_t* blocks, int gcx, int gcz) {
-    memcpy(this->blocks, blocks, CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t));
-    this->x = gcx;
-    this->z = gcz;
+void updateChunkBlocks(Chunk* this, uint8_t* blocks) {
+    free(this->blocks);
+    this->blocks = blocks;
+}
+
+void updateChunkPosition(Chunk* this, int gcx, int gcz) {
+    this->gcx = gcx;
+    this->gcz = gcz;
 }
 
 uint8_t getBlock(ChunkRingBuffer2D* loadedChunks, int gx, int gy, int gz);
@@ -74,9 +78,9 @@ void __stdcall remeshChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WORK
                 Block currentBlock = TO_VALUE(Block) getFromDynamicArray(blockRegistry, this->BLOCK_AT(bx, by, bz));
 
                 // Die Blockkoordinaten werden in globale Koordinaten umgewandelt
-                int gx = this->x * CHUNK_WIDTH + bx;
+                int gx = this->gcx * CHUNK_WIDTH + bx;
                 int gy = by;
-                int gz = this->z * CHUNK_DEPTH + bz;
+                int gz = this->gcz * CHUNK_DEPTH + bz;
                 
                 // Falls Face sichtbar ist (an Luft grenzt), wird es dem Chunk-Mesh hinzugefügt
                 if(getBlock(args->loadedChunks, gx, gy, gz + 1) == BLOCK_AIR) {
@@ -234,9 +238,9 @@ void addVertexToChunkMesh(Face face, DynamicArray* vertices, float bx, float by,
     switch(face) {
 
         case FRONT:
-            addFloatToDynamicArray(vertices, 0.0f); // x-Komponente der Normale
+            addFloatToDynamicArray(vertices, 0.0f); // gcx-Komponente der Normale
             addFloatToDynamicArray(vertices, 0.0f); // y-Komponente der Normale
-            addFloatToDynamicArray(vertices, 1.0f); // z-Komponente der Normale
+            addFloatToDynamicArray(vertices, 1.0f); // gcz-Komponente der Normale
             break;
 
         case BACK:
@@ -278,7 +282,7 @@ void addVertexToChunkMesh(Face face, DynamicArray* vertices, float bx, float by,
 void renderChunk(Chunk* this, Shader shader) {
     mat4 model;
     glm_mat4_identity(model);
-    glm_translate(model, (vec3) {this->x * CHUNK_WIDTH, -CHUNK_HEIGHT / 2, this->z * CHUNK_DEPTH});
+    glm_translate(model, (vec3) {this->gcx * CHUNK_WIDTH, -CHUNK_HEIGHT / 2, this->gcz * CHUNK_DEPTH});
     setMatrix(shader, "model", model);
     renderMesh(this->mesh);
 }

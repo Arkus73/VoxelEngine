@@ -1,15 +1,12 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
-#include <glfw/glfw3.h>
+#include <cglm/cglm.h>
+#include <GLFW/glfw3.h>
 
 typedef struct {
-    vec3 pos;
-    vec3 dir;
-    vec3 right;
-    vec3 up;
-
-    float yaw, pitch;   // yaw ist der Winkel, der die Rotation um die x-Achse beschreibt, pitch der um die y-Achse
+    vec3 pos, dir, right, up;
+    float yaw, pitch;
 } Camera;
 
 Camera* createCamera(vec3 pos, float yaw, float pitch);

@@ -19,11 +19,12 @@ typedef enum {
 typedef struct {
     Mesh* mesh; // Das Mesh des Chunks
     uint8_t* blocks;  // Array mit allen Blöcken des Chunks, gespeichert als Byte-große Block-IDs
-    int x, z;  // Koordinaten des Chunks in gc
+    int gcx, gcz;  // Koordinaten des Chunks in gc
 } Chunk;
 
 Chunk* createChunk(uint8_t* blocks, int gcx, int gcz);
-void updateChunk(Chunk* this, uint8_t* blocks, int gcx, int gcz);
+void updateChunkBlocks(Chunk* this, uint8_t* blocks);
+void updateChunkPosition(Chunk* this, int gcx, int gcz);
 void destroyChunk(Chunk* this);
 void __stdcall remeshChunk(PTP_CALLBACK_INSTANCE instance, void* param, PTP_WORK work);  // Updated das Chunk-Mesh aufgrund des block-Arrays
 void renderChunk(Chunk* this, Shader shader);

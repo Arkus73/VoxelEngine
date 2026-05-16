@@ -89,13 +89,3 @@ unsigned int createTexture(const char* dir, int filter) {
 int __const modulo(int a, int b) {
     return (a % b + b) % b;
 }
-
-bool isLocalChunkValid(ChunkRingBuffer2D* loadedChunks, int lcx, int lcz){   // Prüft, ob sich die lc-Koordinaten innerhalb der Welt befinden
-    int gcx = loadedChunks->offsetX + lcx;
-    int gcz = loadedChunks->offsetZ + lcz;
-    return (gcx <= WORLD_WIDTH / 2 && gcx >= -WORLD_WIDTH / 2) && (gcz <= WORLD_DEPTH / 2 && gcz >= -WORLD_DEPTH / 2);
-}
-
-bool isGlobalChunkValid(int gcx, int gcz){   // Prüft, ob sich die gc-Koordinaten innerhalb der Welt befinden
-    return (gcx <= WORLD_WIDTH / 2 && gcx >= -WORLD_WIDTH / 2) && (gcz <= WORLD_DEPTH / 2 && gcz >= -WORLD_DEPTH / 2);
-}

@@ -42,6 +42,7 @@ bool firstMouse = true;
 mat4 proj;
 
 ChunkRenderer* chunkRenderer;
+WorldGenerator* worldGenerator;
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -54,6 +55,7 @@ int main(int argc, char** argv) {
     bool wireframe = false;
     int seed = 0;
     float frequency = 0.0f;
+    int gradientCount = 0;
     int currentToken = 1;
     while(currentToken < argc) {
 
@@ -81,6 +83,18 @@ int main(int argc, char** argv) {
             }
         }
 
+        else if(strcmp(argv[currentToken], "--gradientCount") == 0) {
+            currentToken++;
+            if(currentToken >= argc) {
+                throwException("GradientCount couldn't be parsed");
+            }
+            char* endptr;
+            gradientCount = (int) strtol(argv[currentToken], &endptr, 10);
+            if(endptr == argv[currentToken]) {
+                throwException("GradientCount couldn't be parsed");
+            }
+        }
+
         else if(strcmp(argv[currentToken], "--wireframe") == 0) {
             wireframe = true;
         }
@@ -95,6 +109,7 @@ int main(int argc, char** argv) {
     // Wurde ein Wert nicht in den Argumenten gesetzt, wird er gedefaultet
     seed = (seed == 0) ? (int) time(NULL) : seed;
     frequency = (frequency == 0.0f) ? 0.8f : frequency;
+    gradientCount = (gradientCount == 0) ? 8 : gradientCount;
 
     // Das Setup findet statt
     glfwInit();
@@ -124,8 +139,9 @@ int main(int argc, char** argv) {
     
     // Alles zur Welt und Rendering benötigtes wird initialisiert
     initBlocks();
-    generateWorld(seed, frequency);
+    worldGenerator = initWorldGenerator(gradientCount, seed, frequency);
     chunkRenderer = initChunkRenderer();
+    generateLoadedChunks(chunkRenderer, worldGenerator);
     remeshLoadedChunks(chunkRenderer);
 
     glEnable(GL_CULL_FACE); // Face-Culling wird aktiviert, wodurch Faces, die vom Spieler wegzeigen nicht gerendert werden, was zu deutlich besserer Perfomance führt
@@ -182,7 +198,7 @@ void processInput(GLFWwindow* window, float delta) {
     vec3 lastPlayerPos;
     glm_vec3_copy(cam->pos, lastPlayerPos);
     processCameraKeyboardInput(window, cam, delta); // Spieler-Input wird gehandelt
-    dynamicallyLoadAndUnloadChunks(chunkRenderer, lastPlayerPos, cam->pos);    // Die geladenen Chunks werden geupdatet
+    dynamicallyLoadAndUnloadChunks(chunkRenderer, worldGenerator, lastPlayerPos, cam->pos);    // Die geladenen Chunks werden geupdatet
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
@@ -204,7 +220,8 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 
 void __destructor deinit() {
     // Alles wird aufgeräumt
-    system("del ..\\chunks\\*.bin");
+    system("if exist \"..\\chunks\\*.bin\" del ..\\chunks\\*.bin");
+    deinitWorldGenerator(worldGenerator);
     deinitChunkRenderer(chunkRenderer);
     destroyBlocks();
     destroyCamera(cam);

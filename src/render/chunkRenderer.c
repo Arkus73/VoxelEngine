@@ -10,6 +10,7 @@
 #include <cglm/cglm.h>
 #include <stdlib.h>
 #include <windows.h>
+#include <stdint.h>
 
 typedef enum {
     FORWARD_MOVEMENT,
@@ -33,28 +34,58 @@ ChunkRenderer* initChunkRenderer() {
         throwException("Memory for ChunkRenderer couldn't be allocated");
     }
 
-    chunkRenderer->loadedChunks = createChunkRingBuffer2D();   // Die geladenen Chunks werden initialisiert
-    for(int lcx = 0; lcx < chunkRenderer->loadedChunks->rowLen; lcx++) {
-        for(int lcz = 0; lcz < chunkRenderer->loadedChunks->rowLen; lcz++) {
-            writeToChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, lcz, createChunk(loadChunkData(lcx + chunkRenderer->loadedChunks->offsetX, lcz + chunkRenderer->loadedChunks->offsetZ), lcx + chunkRenderer->loadedChunks->offsetX, lcz + chunkRenderer->loadedChunks->offsetZ));
-        }
+    uint8_t* initData = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t));
+    if(initData == NULL) {
+        throwException("Memory for initData couldn't be allocated");
     }
-
-    chunkRenderer->voidChunkData = malloc(CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH * sizeof(uint8_t)); // Die VoidChunk-Daten (-> Chunk, der nur aus Luftblöcken besteht) werden generiert
     for(int bx = 0; bx < CHUNK_WIDTH; bx++) {
         for(int by = 0; by < CHUNK_HEIGHT; by++) {
             for(int bz = 0; bz < CHUNK_DEPTH; bz++) {
-                chunkRenderer->voidChunkData[bx * CHUNK_HEIGHT * CHUNK_DEPTH + by * CHUNK_DEPTH + bz] = BLOCK_AIR;
+                initData[bx * CHUNK_HEIGHT * CHUNK_DEPTH + by * CHUNK_DEPTH + bz] = BLOCK_AIR;
             }
         }
     }
 
+    chunkRenderer->loadedChunks = createChunkRingBuffer2D();   // Die geladenen Chunks werden initialisiert
+    for(int lcx = 0; lcx < chunkRenderer->loadedChunks->rowLen; lcx++) {
+        for(int lcz = 0; lcz < chunkRenderer->loadedChunks->rowLen; lcz++) {
+            writeToChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, lcz, createChunk(initData, lcx + chunkRenderer->loadedChunks->offsetX, lcz + chunkRenderer->loadedChunks->offsetZ));
+        }
+    }
+
+    free(initData);
+
     // Alles zur Synchronisation benötigte wird initialisiert
-    chunkRenderer->resultQueue = createQueue();
+    chunkRenderer->remeshingWorkResultQueue = createQueue();
+    chunkRenderer->chunkGenerationWorkResultQueue = createQueue();
+    chunkRenderer->remeshingWorkBatch = NULL;
+    chunkRenderer->chunkGenerationWorkBatch = NULL;
     chunkRenderer->queuedChunkMovements = createDynamicArray(sizeof(MovementDirection), 1);
-    InitializeCriticalSection(&chunkRenderer->resultQueueLock);
+    InitializeCriticalSection(&chunkRenderer->remeshingWorkResultQueueLock);
+    InitializeCriticalSection(&chunkRenderer->chunkGenerationWorkResultQueueLock);
 
     return chunkRenderer;
+}
+
+RemeshingWorkArgs* createRemeshingWorkArgs(ChunkRenderer* chunkRenderer, int lcx, int lcz) {
+    RemeshingWorkArgs* this = malloc(sizeof(RemeshingWorkArgs));
+    if(this == NULL) {
+        throwException("Memory for RemeshingWorkArgs couldn't be allocated");
+    }
+    this->chunk = getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, lcz);
+    this->resultQueue = chunkRenderer->remeshingWorkResultQueue;
+    this->resultQueueLock = &chunkRenderer->remeshingWorkResultQueueLock;
+    this->loadedChunks = chunkRenderer->loadedChunks;
+    return this;
+}
+
+void createRemeshingWork(ChunkRenderer* chunkRenderer, int lcx, int lcz) {
+    // Die Argumente für den remeshChunk-Thread werden vorbereitet
+    RemeshingWorkArgs* args = createRemeshingWorkArgs(chunkRenderer, lcx, lcz);
+
+    // Die Work-Instanz wird erstellt und in chunkRenderer->remeshingWorkBatch registriert
+    PTP_WORK work = CreateThreadpoolWork(remeshChunk, args, NULL);
+    addToDynamicArray(chunkRenderer->remeshingWorkBatch, &work);
 }
 
 RemeshingWorkResult* createRemeshingWorkResult(DynamicArray* vertices, DynamicArray* indices, Chunk* chunk, PTP_WORK work) {
@@ -77,24 +108,50 @@ void destroyRemeshingWorkResult(RemeshingWorkResult* this) {
     free(this);
 }
 
-RemeshingWorkArgs* createRemeshingWorkArgs(ChunkRenderer* chunkRenderer, int lcx, int lcz) {
-    RemeshingWorkArgs* this = malloc(sizeof(RemeshingWorkArgs));
+ChunkGenerationWorkArgs* createChunkGenerationWorkArgs(ChunkRenderer* chunkRenderer, WorldGenerator* worldGenerator, Chunk* chunk) {
+    ChunkGenerationWorkArgs* this = malloc(sizeof(ChunkGenerationWorkArgs));
     if(this == NULL) {
-        throwException("Memory for RemeshingWorkArgs couldn't be allocated");
+        throwException("Memory for ChunkGenerationWorkArgs couldn't be allocated");
     }
-    this->chunk = getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, lcz);
-    this->resultQueue = chunkRenderer->resultQueue;
-    this->resultQueueLock = &chunkRenderer->resultQueueLock;
-    this->loadedChunks = chunkRenderer->loadedChunks;
+    this->chunk = chunk;
+    this->worldGenerator = worldGenerator;
+    this->resultQueue = chunkRenderer->chunkGenerationWorkResultQueue;
+    this->resultQueueLock = &chunkRenderer->chunkGenerationWorkResultQueueLock;
     return this;
+}
+
+ChunkGenerationWorkResult* createChunkGenerationWorkResult(PTP_WORK work) {
+    ChunkGenerationWorkResult* this = malloc(sizeof(ChunkGenerationWorkResult));
+    if(this == NULL) {
+        throwException("Memory for ChunkGenerationWorkResult coulnd't be allocated");
+    }
+    this->work = work;
+    return this;
+}
+
+void destroyChunkGenerationWorkResult(ChunkGenerationWorkResult* this) {
+    WaitForThreadpoolWorkCallbacks(this->work, false);
+    CloseThreadpoolWork(this->work);
+    free(this);
 }
 
 void deinitChunkRenderer(ChunkRenderer* chunkRenderer) {
 
-    for(int i = 0; i < chunkRenderer->currentRemeshingWorkBatch->len; i++) {
-        PTP_WORK work = TO_VALUE(PTP_WORK) getFromDynamicArray(chunkRenderer->currentRemeshingWorkBatch, i);
-        WaitForThreadpoolWorkCallbacks(work, false);
-        CloseThreadpoolWork(work);
+    if(chunkRenderer->remeshingWorkBatch != NULL) {
+        for(int i = 0; i < chunkRenderer->remeshingWorkBatch->len; i++) {
+            PTP_WORK work = TO_VALUE(PTP_WORK) getFromDynamicArray(chunkRenderer->remeshingWorkBatch, i);
+            WaitForThreadpoolWorkCallbacks(work, false);
+            CloseThreadpoolWork(work);
+        }
+        destroyDynamicArray(chunkRenderer->remeshingWorkBatch);
+    }
+    if(chunkRenderer->chunkGenerationWorkBatch != NULL) {
+        for(int i = 0; i < chunkRenderer->chunkGenerationWorkBatch->len; i++) {
+            PTP_WORK work = TO_VALUE(PTP_WORK) getFromDynamicArray(chunkRenderer->chunkGenerationWorkBatch, i);
+            WaitForThreadpoolWorkCallbacks(work, false);
+            CloseThreadpoolWork(work);
+        }
+        destroyDynamicArray(chunkRenderer->chunkGenerationWorkBatch);
     }
 
     for(int lcx = 0; lcx < chunkRenderer->loadedChunks->rowLen; lcx++) {
@@ -104,27 +161,40 @@ void deinitChunkRenderer(ChunkRenderer* chunkRenderer) {
     }
     destroyChunkRingBuffer2D(chunkRenderer->loadedChunks);
 
-    while(chunkRenderer->resultQueue->front != NULL) {
-        destroyRemeshingWorkResult(popFromQueue(chunkRenderer->resultQueue));
+    while(chunkRenderer->remeshingWorkResultQueue->front != NULL) {
+        destroyRemeshingWorkResult(popFromQueue(chunkRenderer->remeshingWorkResultQueue));
     }
-    destroyQueue(chunkRenderer->resultQueue, false);
+    destroyQueue(chunkRenderer->remeshingWorkResultQueue, false);
+
+    while(chunkRenderer->chunkGenerationWorkResultQueue->front != NULL) {
+        destroyChunkGenerationWorkResult(popFromQueue(chunkRenderer->chunkGenerationWorkResultQueue));
+    }
+    destroyQueue(chunkRenderer->chunkGenerationWorkResultQueue, false);
 
     free(chunkRenderer);
 }
 
 void remeshLoadedChunks(ChunkRenderer* chunkRenderer) {
-    chunkRenderer->currentRemeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), pow(chunkRenderer->loadedChunks->rowLen, 2));
+    chunkRenderer->remeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), chunkRenderer->loadedChunks->rowLen * chunkRenderer->loadedChunks->rowLen);
     for(int lcx = 0; lcx < chunkRenderer->loadedChunks->rowLen; lcx++) {
         for(int lcz = 0; lcz < chunkRenderer->loadedChunks->rowLen; lcz++) {
 
-            // Die Argumente für den remeshChunk-Thread werden vorbereitet
-            RemeshingWorkArgs* args = createRemeshingWorkArgs(chunkRenderer, lcx, lcz);
+            createRemeshingWork(chunkRenderer, lcx, lcz);
 
-            // Die Work-Instanz wird erstellt, submittet und in chunkRenderer->currentRemeshingWorkBatch registriert
-            PTP_WORK remeshingWork = CreateThreadpoolWork(remeshChunk, args, NULL);
-            addToDynamicArray(chunkRenderer->currentRemeshingWorkBatch, &remeshingWork);
-            SubmitThreadpoolWork(remeshingWork);
+        }
+    }
+}
 
+void generateLoadedChunks(ChunkRenderer* chunkRenderer, WorldGenerator* worldGenerator) {
+    chunkRenderer->chunkGenerationWorkBatch = createDynamicArray(sizeof(PTP_WORK), chunkRenderer->loadedChunks->rowLen * chunkRenderer->loadedChunks->rowLen);
+    for(int lcx = 0; lcx < chunkRenderer->loadedChunks->rowLen; lcx++) {
+        for(int lcz = 0; lcz < chunkRenderer->loadedChunks->rowLen; lcz++) {
+
+            ChunkGenerationWorkArgs* args = createChunkGenerationWorkArgs(chunkRenderer, worldGenerator, getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, lcz));
+
+            PTP_WORK chunkGenerationWork = CreateThreadpoolWork(generateChunk, args, NULL);
+            addToDynamicArray(chunkRenderer->chunkGenerationWorkBatch, &chunkGenerationWork);
+            SubmitThreadpoolWork(chunkGenerationWork);
         }
     }
 }
@@ -195,23 +265,44 @@ bool isChunkInFrustum(Frustum this, float gx, float gy, float gz, float width, f
 
 void renderChunks(ChunkRenderer* chunkRenderer, Shader shader, mat4 view, mat4 proj) {
 
-    // Sind Threads aus dem Work-Batch fertig geworden, werden ihre Ergebnisse übernommen und sie werden aus chunkRenderer->currentRemeshingWorkBatch entfernt, also soz. "abgehakt"
+    // Sind Threads aus dem chunkRemeshingWorkBatch fertig, werden sie "abgehakt"
+    while(true) {
+        EnterCriticalSection(&chunkRenderer->chunkGenerationWorkResultQueueLock);
+        ChunkGenerationWorkResult* result = popFromQueue(chunkRenderer->chunkGenerationWorkResultQueue);
+        LeaveCriticalSection(&chunkRenderer->chunkGenerationWorkResultQueueLock);
+        if(result == NULL) {
+            break;
+        }
+        removeByValueFromDynamicArray(chunkRenderer->chunkGenerationWorkBatch, &result->work);
+        destroyChunkGenerationWorkResult(result);
+    }
+    // Sind alle Threads des chunkGenerationWorkBatch durchgelaufen wird der Batch destroyed, auf NULL gesetzt und der remeshingWorkBatch begonnen
+    if(chunkRenderer->chunkGenerationWorkBatch != NULL && chunkRenderer->chunkGenerationWorkBatch->len == 0) {
+        destroyDynamicArray(chunkRenderer->chunkGenerationWorkBatch);
+        chunkRenderer->chunkGenerationWorkBatch = NULL;
+
+        for(int i = 0; i < chunkRenderer->remeshingWorkBatch->len; i++) {
+            SubmitThreadpoolWork(TO_VALUE(PTP_WORK) getFromDynamicArray(chunkRenderer->remeshingWorkBatch, i));
+        }
+    }
+
+    // Sind Threads aus dem remeshingWorkBatch fertig geworden, werden ihre Ergebnisse übernommen und sie werden aus chunkRenderer->remeshingWorkBatch entfernt, also soz. "abgehakt"
     while(true) {
         // Der Zugriff wird gelockt, um Race-Conditions mit den Worker-Threads zu verhindern
-        EnterCriticalSection(&chunkRenderer->resultQueueLock);
-        RemeshingWorkResult* result = popFromQueue(chunkRenderer->resultQueue);
-        LeaveCriticalSection(&chunkRenderer->resultQueueLock);
+        EnterCriticalSection(&chunkRenderer->remeshingWorkResultQueueLock);
+        RemeshingWorkResult* result = popFromQueue(chunkRenderer->remeshingWorkResultQueue);
+        LeaveCriticalSection(&chunkRenderer->remeshingWorkResultQueueLock);
         if(result == NULL) {
             break;
         }
         generateMesh(result->chunk->mesh, result->vertices->ptr, result->vertices->len, result->indices->ptr, result->indices->len);
-        removeByValueFromDynamicArray(chunkRenderer->currentRemeshingWorkBatch, &result->work);
+        removeByValueFromDynamicArray(chunkRenderer->remeshingWorkBatch, &result->work);
         destroyRemeshingWorkResult(result);
     }
-    // Sind alle Threads des Work-Batches durchgelaufen wird der Batch destroyed und auf NULL gesetzt, damit dynamicallyLoadAndUnloadChunks weiß, dass ein neuer Batch angefangen werden darf
-    if(chunkRenderer->currentRemeshingWorkBatch != NULL && chunkRenderer->currentRemeshingWorkBatch->len == 0) {
-        destroyDynamicArray(chunkRenderer->currentRemeshingWorkBatch);
-        chunkRenderer->currentRemeshingWorkBatch = NULL;
+    // Sind alle Threads des remeshingWorkBatches durchgelaufen wird der Batch destroyed und auf NULL gesetzt, damit dynamicallyLoadAndUnloadChunks weiß, dass ein neuer Batch angefangen werden darf
+    if(chunkRenderer->remeshingWorkBatch != NULL && chunkRenderer->remeshingWorkBatch->len == 0) {
+        destroyDynamicArray(chunkRenderer->remeshingWorkBatch);
+        chunkRenderer->remeshingWorkBatch = NULL;
     }
 
     Frustum frustum;
@@ -247,7 +338,7 @@ void renderChunks(ChunkRenderer* chunkRenderer, Shader shader, mat4 view, mat4 p
             Chunk* chunk = getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, lcz);
 
             // Befindet sich ein Chunk im Sichtfeld, wird er gerendert. Ansonsten nicht
-            if(isChunkInFrustum(frustum, (float) chunk->x * CHUNK_WIDTH, -CHUNK_HEIGHT / 2.0f, (float) chunk->z * CHUNK_DEPTH, (float) CHUNK_WIDTH, (float) CHUNK_HEIGHT, (float) CHUNK_DEPTH)) {
+            if(isChunkInFrustum(frustum, (float) chunk->gcx * CHUNK_WIDTH, -CHUNK_HEIGHT / 2.0f, (float) chunk->gcz * CHUNK_DEPTH, (float) CHUNK_WIDTH, (float) CHUNK_HEIGHT, (float) CHUNK_DEPTH)) {
                 renderChunk(chunk, shader);
             }
         }
@@ -293,15 +384,7 @@ void queueChunkMovement(ChunkRenderer* chunkRenderer, MovementDirection movement
     }
 }
 
-void createRemeshingWork(ChunkRenderer* chunkRenderer, int lcx, int lcz) {
-    RemeshingWorkArgs* args = createRemeshingWorkArgs(chunkRenderer, lcx, lcz);
-
-    PTP_WORK work = CreateThreadpoolWork(remeshChunk, args, NULL);
-    addToDynamicArray(chunkRenderer->currentRemeshingWorkBatch, &work);
-    SubmitThreadpoolWork(work);
-}
-
-void dynamicallyLoadAndUnloadChunks(ChunkRenderer* chunkRenderer, vec3 lastPlayerPos, vec3 playerPos) {
+void dynamicallyLoadAndUnloadChunks(ChunkRenderer* chunkRenderer, WorldGenerator* worldGenerator, vec3 lastPlayerPos, vec3 playerPos) {
 
     // Die g-Spielerkoordinaten werden in gc-Koordinaten umgewandelt
     vec2 lastChunkPos, chunkPos;
@@ -325,78 +408,65 @@ void dynamicallyLoadAndUnloadChunks(ChunkRenderer* chunkRenderer, vec3 lastPlaye
     }
 
     // Wurde der Batch abgehandelt, wird das nächste Element aus der movement-Queue zu einem neuen Batch verarbeitet, falls es eines gibt
-    if(chunkRenderer->currentRemeshingWorkBatch == NULL && chunkRenderer->queuedChunkMovements->len != 0) {
+    if(chunkRenderer->remeshingWorkBatch == NULL && chunkRenderer->queuedChunkMovements->len != 0) {
 
         MovementDirection nextMovement = TO_VALUE(MovementDirection) getFromDynamicArray(chunkRenderer->queuedChunkMovements, 0);
         removeByIndexFromDynamicArray(chunkRenderer->queuedChunkMovements, 0);
 
         if(nextMovement == RIGHT_MOVEMENT) {
             chunkRenderer->loadedChunks->offsetX++;    // Der Ringbuffer wird verschoben
-            incrementStartX(chunkRenderer->loadedChunks);  // Der Pointer, der zum ersten x-Element zeigt wird inkrementiert (-> Ringbuffer wird verschoben)
-            chunkRenderer->currentRemeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), 2 * (2 * RENDER_DISTANCE + 1));    // Der neue RemeshingWorkBatch wird initialisiert
+            incrementStartX(chunkRenderer->loadedChunks);  // Der Pointer, der zum ersten x-Element zeigt wird inkrementiert (-> Die lcx-Positionen der Chunks werden verschoben)
+            chunkRenderer->remeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), 2 * (2 * RENDER_DISTANCE + 1));    // Der neue RemeshingWorkBatch wird initialisiert
             for(int lcz = 0; lcz < chunkRenderer->loadedChunks->rowLen; lcz++) { // Es wird über die zu verändernde Spalte iteriert
-
-                if(!isLocalChunkValid(chunkRenderer->loadedChunks, chunkRenderer->loadedChunks->rowLen - 1, lcz)) {  // Kann der zum Laden benötigte Chunk geladen werden?
-                    updateChunk(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, chunkRenderer->loadedChunks->rowLen - 1, lcz), chunkRenderer->voidChunkData, chunkRenderer->loadedChunks->offsetX + chunkRenderer->loadedChunks->rowLen - 1, lcz + chunkRenderer->loadedChunks->offsetZ);  // Nein: Der Chunk wird zu einem VoidChunk
-                } else {
-                    updateChunk(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, chunkRenderer->loadedChunks->rowLen - 1, lcz), loadChunkData(chunkRenderer->loadedChunks->offsetX + chunkRenderer->loadedChunks->rowLen - 1, lcz + chunkRenderer->loadedChunks->offsetZ), chunkRenderer->loadedChunks->offsetX + chunkRenderer->loadedChunks->rowLen - 1, lcz + chunkRenderer->loadedChunks->offsetZ);   // Ja: Die Blockdaten des benötigten Chunks werden aus dem ChunkFile geladen und in den Chunk mit seinen neuen gc-Koordinaten eingesetzt
-                }
-
+                int lcx = chunkRenderer->loadedChunks->rowLen - 1;
+                updateChunkPosition(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, lcz), chunkRenderer->loadedChunks->offsetX + lcx, chunkRenderer->loadedChunks->offsetZ + lcz); // Die gcx-Position des Chunks wird verschoben
                 for(int lcx = chunkRenderer->loadedChunks->rowLen - 2; lcx < chunkRenderer->loadedChunks->rowLen; lcx++) { // Die nötigen Chunks werden geremesht, damit die Änderungen in die Meshes übernommen werden
                     createRemeshingWork(chunkRenderer, lcx, lcz);
                 }
             }
+            generateLoadedChunks(chunkRenderer, worldGenerator);
         }
 
         if(nextMovement == LEFT_MOVEMENT) {
             chunkRenderer->loadedChunks->offsetX--;
             decrementStartX(chunkRenderer->loadedChunks);
-            chunkRenderer->currentRemeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), 2 * (2 * RENDER_DISTANCE + 1));
+            chunkRenderer->remeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), 2 * (2 * RENDER_DISTANCE + 1));
             for(int lcz = 0; lcz < chunkRenderer->loadedChunks->rowLen; lcz++) {
-                if(!isLocalChunkValid(chunkRenderer->loadedChunks, 0, lcz)) {
-                    updateChunk(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, 0, lcz), chunkRenderer->voidChunkData, chunkRenderer->loadedChunks->offsetX, lcz + chunkRenderer->loadedChunks->offsetZ); 
-                } else{
-                    updateChunk(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, 0, lcz), loadChunkData(chunkRenderer->loadedChunks->offsetX, lcz + chunkRenderer->loadedChunks->offsetZ), chunkRenderer->loadedChunks->offsetX, lcz + chunkRenderer->loadedChunks->offsetZ); 
-                }
-
+                int lcx = 0;
+                updateChunkPosition(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, lcz), chunkRenderer->loadedChunks->offsetX + lcx, chunkRenderer->loadedChunks->offsetZ + lcz);
                 for(int lcx = 0; lcx < 2; lcx++) {
                     createRemeshingWork(chunkRenderer, lcx, lcz);
                 }
             }
+            generateLoadedChunks(chunkRenderer, worldGenerator);
         }
 
         if(nextMovement == BACKWARD_MOVEMENT) {
             chunkRenderer->loadedChunks->offsetZ++;
             incrementStartZ(chunkRenderer->loadedChunks);
-            chunkRenderer->currentRemeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), 2 * (2 * RENDER_DISTANCE + 1));
+            chunkRenderer->remeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), 2 * (2 * RENDER_DISTANCE + 1));
             for(int lcx = 0; lcx < chunkRenderer->loadedChunks->rowLen; lcx++) {
-                if(!isLocalChunkValid(chunkRenderer->loadedChunks, lcx, chunkRenderer->loadedChunks->rowLen - 1)) {
-                    updateChunk(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, chunkRenderer->loadedChunks->rowLen - 1), chunkRenderer->voidChunkData, lcx + chunkRenderer->loadedChunks->offsetX, chunkRenderer->loadedChunks->offsetZ + chunkRenderer->loadedChunks->rowLen - 1);
-                } else {
-                    updateChunk(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, chunkRenderer->loadedChunks->rowLen - 1), loadChunkData(lcx + chunkRenderer->loadedChunks->offsetX, chunkRenderer->loadedChunks->offsetZ + chunkRenderer->loadedChunks->rowLen - 1), lcx + chunkRenderer->loadedChunks->offsetX, chunkRenderer->loadedChunks->offsetZ + chunkRenderer->loadedChunks->rowLen - 1);
-                }
-
+                int lcz = chunkRenderer->loadedChunks->rowLen - 1;
+                updateChunkPosition(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, lcz), chunkRenderer->loadedChunks->offsetX + lcx, chunkRenderer->loadedChunks->offsetZ + lcz);
                 for(int lcz = chunkRenderer->loadedChunks->rowLen - 2; lcz < chunkRenderer->loadedChunks->rowLen; lcz++) {
                     createRemeshingWork(chunkRenderer, lcx, lcz);
                 }
             }
+            generateLoadedChunks(chunkRenderer, worldGenerator);
         }
 
         if(nextMovement == FORWARD_MOVEMENT) {
             chunkRenderer->loadedChunks->offsetZ--;
             decrementStartZ(chunkRenderer->loadedChunks);
-            chunkRenderer->currentRemeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), 2 * (2 * RENDER_DISTANCE + 1));
+            chunkRenderer->remeshingWorkBatch = createDynamicArray(sizeof(PTP_WORK), 2 * (2 * RENDER_DISTANCE + 1));
             for(int lcx = 0; lcx < chunkRenderer->loadedChunks->rowLen; lcx++) {
-                if(!isLocalChunkValid(chunkRenderer->loadedChunks, lcx, 0)) {
-                    updateChunk(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, 0), chunkRenderer->voidChunkData, lcx + chunkRenderer->loadedChunks->offsetX, chunkRenderer->loadedChunks->offsetZ);
-                } else {
-                    updateChunk(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, 0), loadChunkData(lcx + chunkRenderer->loadedChunks->offsetX, chunkRenderer->loadedChunks->offsetZ), lcx + chunkRenderer->loadedChunks->offsetX, chunkRenderer->loadedChunks->offsetZ);
-                }
-
+                int lcz = 0;
+                updateChunkPosition(getFromChunkRingBuffer2D(chunkRenderer->loadedChunks, lcx, lcz), chunkRenderer->loadedChunks->offsetX + lcx, chunkRenderer->loadedChunks->offsetZ + lcz);
                 for(int lcz = 0; lcz < 2; lcz++) {
                     createRemeshingWork(chunkRenderer, lcx, lcz);
                 }
             }
+            generateLoadedChunks(chunkRenderer, worldGenerator);
         }
     }
 }
