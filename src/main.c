@@ -31,18 +31,18 @@
 // Sonstiges:
 // TODO Ein bisschen mit Postprocessing und Shadern herumspielen
 
-#define WINDOW_WIDTH 800
-#define WINDOW_HEIGHT 600
-
 Shader shader;
 
 Camera* cam;
-float lastX = WINDOW_WIDTH / 2, lastY = WINDOW_HEIGHT / 2;
+float lastX, lastY;
 bool firstMouse = true;
 mat4 proj;
 
 ChunkRenderer* chunkRenderer;
 WorldGenerator* worldGenerator;
+
+int RENDER_DISTANCE = 0;
+float FOV = 0.0f;
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -52,10 +52,13 @@ void __destructor deinit(); // Funktion, die alles im Falle der Beendiung des Pr
 int main(int argc, char** argv) {
 
     // Die Anfangsargumente werden geparst
+    bool vsync = false;
     bool wireframe = false;
     int seed = 0;
     float frequency = 0.0f;
     int gradientCount = 0;
+    int windowWidth = 0;
+    int windowHeight = 0;
     int currentToken = 1;
     while(currentToken < argc) {
 
@@ -99,6 +102,58 @@ int main(int argc, char** argv) {
             wireframe = true;
         }
 
+        else if(strcmp(argv[currentToken], "--vsync") == 0) {
+            vsync = true;
+        }
+
+        else if(strcmp(argv[currentToken], "--windowWidth") == 0) {
+            currentToken++;
+            if(currentToken >= argc) {
+                throwException("WindowWidth couldn't be parsed");
+            }
+            char* endptr;
+            windowWidth = (int) strtol(argv[currentToken], &endptr, 10);
+            if(endptr == argv[currentToken]) {
+                throwException("WindowWidth couldn't be parsed");
+            }
+        }
+
+        else if(strcmp(argv[currentToken], "--windowHeight") == 0) {
+            currentToken++;
+            if(currentToken >= argc) {
+                throwException("WindowHeight couldn't be parsed");
+            }
+            char* endptr;
+            windowHeight = (int) strtol(argv[currentToken], &endptr, 10);
+            if(endptr == argv[currentToken]) {
+                throwException("WindowHeight couldn't be parsed");
+            }
+        }
+
+        else if(strcmp(argv[currentToken], "--FOV") == 0) {
+            currentToken++;
+            if(currentToken >= argc) {
+                throwException("FOV couldn't be parsed");
+            }
+            char* endptr;
+            FOV = (float) strtof(argv[currentToken], &endptr);
+            if(endptr == argv[currentToken]) {
+                throwException("FOV couldn't be parsed");
+            }
+        }
+
+        else if(strcmp(argv[currentToken], "--renderDistance") == 0) {
+            currentToken++;
+            if(currentToken >= argc) {
+                throwException("RenderDistance couldn't be parsed");
+            }
+            char* endptr;
+            RENDER_DISTANCE = (int) strtol(argv[currentToken], &endptr, 10);
+            if(endptr == argv[currentToken]) {
+                throwException("RenderDistance couldn't be parsed");
+            }
+        }
+
         else{
             throwException("Flag not recognised");
         }
@@ -106,18 +161,29 @@ int main(int argc, char** argv) {
         currentToken++;
     }
 
-    // Wurde ein Wert nicht in den Argumenten gesetzt, wird er gedefaultet
+    // Wurde ein Wert nicht in den Argumenten gesetzt oder wurde ein nicht zugelassener Wert gesetzt, wird er gedefaultet
     seed = (seed == 0) ? (int) time(NULL) : seed;
-    frequency = (frequency == 0.0f) ? 0.8f : frequency;
-    gradientCount = (gradientCount == 0) ? 8 : gradientCount;
+    frequency = (frequency == 0.0f || frequency < 0.0f) ? 0.8f : frequency;
+    gradientCount = (gradientCount == 0 || gradientCount < 0) ? 8 : gradientCount;
+    windowWidth = (windowWidth == 0 || windowWidth < 0) ? 800 : windowWidth;
+    windowHeight = (windowHeight == 0 || windowWidth < 0) ? 600 : windowHeight;
+    FOV = (FOV == 0.0f || FOV < 0.0f) ? 60.0f : FOV;
+    RENDER_DISTANCE = (RENDER_DISTANCE == 0 || RENDER_DISTANCE < 0) ? 10 : RENDER_DISTANCE;
+
+    lastX = (float) windowWidth / 2.0f;
+    lastY = (float) windowHeight / 2.0f;
 
     // Das Setup findet statt
     glfwInit();
-    GLFWwindow* window = InitAndCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Minecraft Clone");
+    GLFWwindow* window = InitAndCreateWindow(windowWidth, windowHeight, "Minecraft Clone");
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
+    // vsync wird aktiviert
+    if(vsync) {
+        glfwSwapInterval(1); 
+    }
 
-    glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+    glViewport(0, 0, windowWidth, windowHeight);
 
     // Die Shader werden geladen
     shader = createShader("../src/shaders/vertex.glsl", "../src/shaders/fragment.glsl");
@@ -126,7 +192,7 @@ int main(int argc, char** argv) {
     // Die nötigen Matrizen werden initialisiert und dem Vertex-Shader übergeben
     mat4 view;
     glm_mat4_identity(view);
-    glm_perspective(glm_rad(FOV), (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT, 0.1f, 1000.0f, proj);
+    glm_perspective(glm_rad(FOV), (float) windowWidth / (float) windowHeight, 0.1f, 1000.0f, proj);
 
     setMatrix(shader, "proj", proj);
 

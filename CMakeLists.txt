@@ -4,9 +4,6 @@ project(Test)
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Alles statisch bauen (alles in die Binary packen)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-
 # OpenGL finden
 find_package(OpenGL REQUIRED)
 
@@ -61,12 +58,4 @@ target_link_libraries(Test
     glad
     cglm
     ${OPENGL_gl_LIBRARY}
-    # Thread-Support wird eingebaut
-    -lwinpthread
-)
-
-# Statisches linken der Standard-Library
-target_link_options(Test PRIVATE
-    -static
-    -static-libgcc
 )
