@@ -1,4 +1,4 @@
-# Voxel Engine
+# Voxel-Engine
 
 ## Description
 This is a small Minecraft-inspired Voxel-Engine I programmed in C using OpenGL for rendering, GLFW for the window and input handling as well as CGLM for the math utilities. This is a hobby project, so feedback would be greatly appreciated.
@@ -29,6 +29,15 @@ When running the application various flags can be provided, such as:
 .\Test --seed 5986812 --frequency 0.4 # Sets the seed to 5986812 and the frequency to 0.4
 .\Test --wireframe --seed 0 --vsync # Enables wireframe, sets the seed to 0 and enables Vsync
 .\Test --windowWidth 1200 --windowHeight 800 --frequency  # Would set the window width and height to 1200, 800, but results in an error as no frequency was specified
+```
+
+### Building
+To build this project yourself, you'll have to use Windows and have MinGW as well as CMake installed. The necessary libraries are already included in the repository ([GLFW](https://github.com/glfw/glfw), GLAD and [CGLM](https://github.com/recp/cglm)). Run The following commands in the VoxelEngine directory in your terminal to build the Engine:
+```powershell
+mkdir build
+cd build
+cmake .. -G "MinGW Makefiles"
+cmake --build .
 ```
 
 ## Current Features
